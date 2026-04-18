@@ -1,0 +1,87 @@
+name: Release
+
+on:
+  push:
+    branches: [master]
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: yarn
+          registry-url: https://registry.npmjs.org
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Detect bumped packages
+        id: detect
+        run: |
+          set -euo pipefail
+          bumped=()
+          for pkg_json in packages/*/package.json; do
+            name=$(node -p "require('./${pkg_json}').name")
+            new_version=$(node -p "require('./${pkg_json}').version")
+            old_version=$(git show HEAD^:"${pkg_json}" 2>/dev/null | node -e "
+              let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{
+                try{process.stdout.write(JSON.parse(s).version||'')}catch{process.stdout.write('')}
+              })" || echo "")
+            if [ "$new_version" != "$old_version" ] && [ -n "$new_version" ]; then
+              private=$(node -p "require('./${pkg_json}').private === true")
+              if [ "$private" = "true" ]; then
+                echo "Skipping private package ${name}"
+                continue
+              fi
+              echo "Bumped: ${name} ${old_version:-<none>} -> ${new_version}"
+              bumped+=("${pkg_json}|${name}|${new_version}")
+            fi
+          done
+          {
+            echo "packages<<EOF"
+            printf '%s\n' "${bumped[@]}"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Build
+        if: steps.detect.outputs.packages != ''
+        run: yarn build
+
+      - name: Publish and release
+        if: steps.detect.outputs.packages != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -euo pipefail
+          while IFS='|' read -r pkg_json name version; do
+            [ -z "$pkg_json" ] && continue
+            dir=$(dirname "$pkg_json")
+            tag="${name}@${version}"
+            echo "Releasing ${tag}"
+
+            if [ -n "${NODE_AUTH_TOKEN:-}" ]; then
+              (cd "$dir" && npm publish --access public --provenance)
+            else
+              echo "NPM_TOKEN not set; skipping npm publish for ${tag}"
+            fi
+
+            if git rev-parse "refs/tags/${tag}" >/dev/null 2>&1; then
+              echo "Tag ${tag} already exists; skipping release"
+              continue
+            fi
+
+            git tag "${tag}"
+            git push origin "${tag}"
+            gh release create "${tag}" \
+              --title "${tag}" \
+              --generate-notes
+          done <<< "${{ steps.detect.outputs.packages }}"

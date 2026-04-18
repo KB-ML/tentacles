@@ -1,0 +1,31 @@
+{
+  "name": "examples",
+  "version": "0.1.2",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --webpack",
+    "build": "next build --webpack",
+    "start": "next start"
+  },
+  "dependencies": {
+    "@kbml-tentacles/core": "*",
+    "@kbml-tentacles/forms": "*",
+    "@kbml-tentacles/forms-react": "*",
+    "@kbml-tentacles/react": "*",
+    "@effector/next": "^0.7.2",
+    "@radix-ui/react-icons": "^1.3.2",
+    "@radix-ui/themes": "^3.3.0",
+    "effector": "^23.0.0",
+    "effector-react": "^23.0.0",
+    "next": "16.2.1",
+    "patronum": "^2.3.0",
+    "react": "19.2.4",
+    "react-dom": "19.2.4"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "typescript": "^5"
+  }
+}

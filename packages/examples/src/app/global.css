@@ -1,0 +1,165 @@
+body {
+  margin: 0;
+}
+
+/* ---- Brand color → Radix accent override ---- */
+
+:root,
+.light,
+.light-theme {
+  --brand: #6948e0;
+  --brand-fg: #ffffff;
+  --accent-1: #f8f6fe;
+  --accent-2: #f0ecfd;
+  --accent-3: #e2dafb;
+  --accent-4: #d1c5f8;
+  --accent-5: #bfadf4;
+  --accent-6: #a990ef;
+  --accent-7: #8e6fe8;
+  --accent-8: #7a59e3;
+  --accent-9: #6948e0;
+  --accent-10: #5a3cc7;
+  --accent-11: #4e34ad;
+  --accent-12: #2a1a6b;
+  --accent-a1: #6948e006;
+  --accent-a2: #6948e00f;
+  --accent-a3: #6948e01a;
+  --accent-a4: #6948e02b;
+  --accent-a5: #6948e03d;
+  --accent-a6: #6948e055;
+  --accent-a7: #6948e077;
+  --accent-a8: #6948e0a0;
+  --accent-a9: #6948e0cc;
+  --accent-a10: #6948e0e0;
+  --accent-a11: #6948e0f0;
+  --accent-a12: #6948e0f7;
+  --accent-contrast: #ffffff;
+  --accent-surface: #f0ecfdcc;
+  --accent-indicator: #6948e0;
+  --accent-track: #6948e0;
+}
+
+.dark,
+.dark-theme {
+  --brand: #b4e43a;
+  --brand-fg: #000000;
+  --accent-1: #141a09;
+  --accent-2: #1d2510;
+  --accent-3: #2a3618;
+  --accent-4: #374821;
+  --accent-5: #455a2b;
+  --accent-6: #577037;
+  --accent-7: #6e8c45;
+  --accent-8: #8fb354;
+  --accent-9: #b4e43a;
+  --accent-10: #c4ec5e;
+  --accent-11: #d4f482;
+  --accent-12: #edfabe;
+  --accent-a1: #b4e43a06;
+  --accent-a2: #b4e43a0f;
+  --accent-a3: #b4e43a1a;
+  --accent-a4: #b4e43a2b;
+  --accent-a5: #b4e43a3d;
+  --accent-a6: #b4e43a55;
+  --accent-a7: #b4e43a77;
+  --accent-a8: #b4e43aa0;
+  --accent-a9: #b4e43acc;
+  --accent-a10: #b4e43ae0;
+  --accent-a11: #b4e43af0;
+  --accent-a12: #b4e43af7;
+  --accent-contrast: #000000;
+  --accent-surface: #1d251080;
+  --accent-indicator: #b4e43a;
+  --accent-track: #b4e43a;
+}
+
+/* ---- Hero ---- */
+
+.hero {
+  position: relative;
+  overflow: hidden;
+  border-radius: 24px;
+  padding: 64px 24px;
+  background: linear-gradient(145deg, var(--accent-a3), transparent 60%);
+  border: 1px solid var(--accent-a4);
+}
+
+.hero::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 20% 40%, var(--accent-a4) 0%, transparent 50%),
+    radial-gradient(circle at 80% 60%, var(--accent-a3) 0%, transparent 40%);
+  pointer-events: none;
+}
+
+.hero-grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(var(--accent-a3) 1px, transparent 1px),
+    linear-gradient(90deg, var(--accent-a3) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: radial-gradient(ellipse at center, black 20%, transparent 70%);
+  pointer-events: none;
+}
+
+.hero-logo {
+  width: 80px;
+  height: 80px;
+  border-radius: 20px;
+  background: var(--accent-9);
+  color: var(--accent-contrast);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow:
+    0 0 0 1px var(--accent-a6),
+    0 8px 32px var(--accent-a4),
+    0 2px 8px var(--accent-a3);
+}
+
+/* ---- Example cards ---- */
+
+.example-card {
+  position: relative;
+  transition:
+    box-shadow 0.2s,
+    transform 0.2s,
+    border-color 0.2s;
+  cursor: pointer;
+}
+
+.example-card:hover {
+  box-shadow:
+    0 8px 32px var(--accent-a4),
+    0 2px 8px var(--gray-a3);
+  transform: translateY(-3px);
+}
+
+.example-card:hover .card-arrow {
+  transform: translateX(4px);
+  opacity: 1;
+}
+
+.card-arrow {
+  transition:
+    transform 0.2s,
+    opacity 0.2s;
+  opacity: 0.4;
+}
+
+.card-number {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: var(--accent-a3);
+  color: var(--accent-11);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 600;
+  flex-shrink: 0;
+}

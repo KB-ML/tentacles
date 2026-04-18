@@ -1,0 +1,155 @@
+:root {
+  --vp-c-brand-1: #6948e0;
+  --vp-c-brand-2: #5a3cc7;
+  --vp-c-brand-3: #4e34ad;
+  --vp-c-brand-soft: rgba(105, 72, 224, 0.14);
+  --vp-button-brand-bg: var(--vp-c-brand-1);
+  --vp-button-brand-hover-bg: var(--vp-c-brand-2);
+  --vp-button-brand-active-bg: var(--vp-c-brand-3);
+}
+
+.dark {
+  --vp-c-brand-1: #b4e43a;
+  --vp-c-brand-2: #c4ec5e;
+  --vp-c-brand-3: #d4f482;
+  --vp-c-brand-soft: rgba(180, 228, 58, 0.14);
+  --vp-button-brand-text: #000;
+  --vp-button-brand-hover-text: #000;
+  --vp-button-brand-active-text: #000;
+}
+
+:root {
+  --vp-home-hero-image-background-image: none;
+  --vp-home-hero-image-filter: none;
+}
+
+.VPHero .image-src {
+  max-width: 280px !important;
+  max-height: 280px !important;
+}
+
+/* ── Badge Row ── */
+
+.badge-row {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  padding: 16px 0 0;
+}
+
+.badge-row img {
+  height: 24px;
+}
+
+/* ── Landing Sections ── */
+
+.landing-section {
+  max-width: 1152px;
+  margin: 0 auto;
+  padding: 64px 24px 0;
+}
+
+.landing-section:last-child {
+  padding-bottom: 80px;
+}
+
+.section-title {
+  text-align: center;
+  font-size: 32px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin: 0 0 8px;
+}
+
+.section-subtitle {
+  text-align: center;
+  font-size: 16px;
+  color: var(--vp-c-text-2);
+  margin: 0 0 40px;
+}
+
+/* ── Quick Start ── */
+
+.install-row {
+  max-width: 480px;
+  margin: 0 auto 32px;
+}
+
+.install-row .vp-code-group {
+  margin: 0 !important;
+}
+
+/* ── Comparison ── */
+
+.comparison-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+
+@media (max-width: 768px) {
+  .comparison-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.comparison-card {
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--vp-c-bg-soft);
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 20px;
+  font-weight: 600;
+  font-size: 15px;
+}
+
+.card-header.before {
+  background: rgba(244, 63, 94, 0.08);
+  color: var(--vp-c-text-1);
+  border-bottom: 2px solid rgba(244, 63, 94, 0.3);
+}
+
+.card-header.after {
+  background: var(--vp-c-brand-soft);
+  color: var(--vp-c-text-1);
+  border-bottom: 2px solid var(--vp-c-brand-1);
+}
+
+.line-count {
+  font-size: 13px;
+  font-weight: 500;
+  opacity: 0.7;
+}
+
+.comparison-card .vp-code-group {
+  margin: 0 !important;
+  border-radius: 0 !important;
+}
+
+.comparison-card .vp-code-group .tabs {
+  border-radius: 0 !important;
+  margin: 0 !important;
+  width: 100% !important;
+}
+
+.comparison-card div[class*="language-"] {
+  margin: 0 !important;
+  border-radius: 0 !important;
+}
+
+.comparison-card .vp-code-group .blocks {
+  max-height: 520px;
+  overflow-y: auto;
+}
+
+/* ── Progressive Complexity Tabs ── */
+
+.landing-section .tabs {
+  justify-content: center;
+}

@@ -1,0 +1,48 @@
+{
+  "compilerOptions": {
+    // Environment setup & latest features
+    "baseUrl": ".",
+    "paths": {
+      "@kbml-tentacles/core": ["./packages/core/index.ts"],
+      "@kbml-tentacles/forms": ["./packages/forms/index.ts"],
+      "@kbml-tentacles/react": ["./packages/react/index.ts"],
+      "@kbml-tentacles/vue": ["./packages/vue/index.ts"],
+      "@kbml-tentacles/solid": ["./packages/solid/index.ts"],
+      "@kbml-tentacles/forms-react": ["./packages/forms-react/index.ts"],
+      "@kbml-tentacles/forms-vue": ["./packages/forms-vue/index.ts"],
+      "@kbml-tentacles/forms-solid": ["./packages/forms-solid/index.ts"],
+      "@kbml-tentacles/forms-arktype": ["./packages/forms-arktype/index.ts"],
+      "@kbml-tentacles/forms-joi": ["./packages/forms-joi/index.ts"],
+      "@kbml-tentacles/forms-valibot": ["./packages/forms-valibot/index.ts"],
+      "@kbml-tentacles/forms-yup": ["./packages/forms-yup/index.ts"],
+      "@kbml-tentacles/forms-zod": ["./packages/forms-zod/index.ts"]
+    },
+    "lib": ["ESNext", "DOM"],
+    "target": "ESNext",
+    "module": "Preserve",
+    "moduleDetection": "force",
+    "allowJs": false,
+    "downlevelIteration": false,
+
+    // Bundler mode
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "noEmit": true,
+
+    // Best practices
+    "strict": true,
+    "skipLibCheck": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "jsx": "react-jsx",
+
+    // Some stricter flags (disabled by default)
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "noPropertyAccessFromIndexSignature": false
+  },
+  "include": ["packages/**/*", "packages/flow-control/example.ts"],
+  "exclude": ["node_modules", "**/node_modules", "packages/solid", "packages/examples"]
+}

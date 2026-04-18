@@ -1,0 +1,63 @@
+{
+  "name": "@kbml-tentacles/core",
+  "version": "0.1.2",
+  "description": "Type-safe dynamic model factory for effector: contracts, models, queries, view-models with SSR scope isolation.",
+  "keywords": [
+    "effector",
+    "tentacles",
+    "typescript",
+    "reactive",
+    "model",
+    "orm",
+    "ssr",
+    "query",
+    "view-model"
+  ],
+  "license": "MIT",
+  "author": "Nikita Lumpov",
+  "homepage": "https://github.com/KB-ML/tentacles#readme",
+  "bugs": {
+    "url": "https://github.com/KB-ML/tentacles/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/KB-ML/tentacles.git",
+    "directory": "packages/core"
+  },
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsup"
+  },
+  "peerDependencies": {
+    "effector": "^23.0.0"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.29.0",
+    "@babel/preset-typescript": "^7.28.5",
+    "@effector/swc-plugin": "^1.0.0",
+    "@types/babel__core": "^7.20.5",
+    "effector": "^23.4.4"
+  }
+}

@@ -1,0 +1,59 @@
+{
+  "name": "@kbml-tentacles/forms-arktype",
+  "version": "0.1.2",
+  "description": "Arktype validation adapter for @kbml-tentacles/forms.",
+  "keywords": [
+    "effector",
+    "tentacles",
+    "typescript",
+    "reactive",
+    "forms",
+    "validation",
+    "arktype"
+  ],
+  "license": "MIT",
+  "author": "Nikita Lumpov",
+  "homepage": "https://github.com/KB-ML/tentacles#readme",
+  "bugs": {
+    "url": "https://github.com/KB-ML/tentacles/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/KB-ML/tentacles.git",
+    "directory": "packages/forms-arktype"
+  },
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsup"
+  },
+  "peerDependencies": {
+    "@kbml-tentacles/core": "^0.1.2",
+    "@kbml-tentacles/forms": "^0.1.2",
+    "arktype": ">=2.0"
+  },
+  "devDependencies": {
+    "arktype": "^2.2.0"
+  }
+}
