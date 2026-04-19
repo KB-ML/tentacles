@@ -1,6 +1,6 @@
 {
   "name": "@kbml-tentacles/forms",
-  "version": "0.1.2",
+  "version": "1.0.0",
   "description": "Contract-driven reactive forms for effector with validation, arrays, and submission orchestration.",
   "keywords": [
     "effector",
@@ -49,7 +49,7 @@
     "build": "tsup"
   },
   "peerDependencies": {
-    "@kbml-tentacles/core": "^0.1.2",
+    "@kbml-tentacles/core": "^1.0.0",
     "effector": "^23.0.0"
   }
 }

@@ -1,6 +1,6 @@
 {
   "name": "@kbml-tentacles/forms-arktype",
-  "version": "0.1.2",
+  "version": "1.0.0",
   "description": "Arktype validation adapter for @kbml-tentacles/forms.",
   "keywords": [
     "effector",
@@ -49,8 +49,8 @@
     "build": "tsup"
   },
   "peerDependencies": {
-    "@kbml-tentacles/core": "^0.1.2",
-    "@kbml-tentacles/forms": "^0.1.2",
+    "@kbml-tentacles/core": "^1.0.0",
+    "@kbml-tentacles/forms": "^1.0.0",
     "arktype": ">=2.0"
   },
   "devDependencies": {

@@ -1,6 +1,6 @@
 {
   "name": "@kbml-tentacles/vue",
-  "version": "0.1.2",
+  "version": "1.0.0",
   "description": "Vue bindings for @kbml-tentacles/core.",
   "keywords": [
     "effector",
@@ -48,7 +48,7 @@
     "build": "tsup"
   },
   "peerDependencies": {
-    "@kbml-tentacles/core": "^0.1.2",
+    "@kbml-tentacles/core": "^1.0.0",
     "effector": "^23.0.0",
     "effector-vue": "^23.0.0",
     "vue": "^3.0.0"
