@@ -9,7 +9,7 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "for p in packages/*/; do if [ \"$p\" != \"packages/examples/\" ]; then (cd \"$p\" && yarn build) || exit $?; fi; done",
+    "build": "for name in $(ls packages); do if [ \"$name\" != \"examples\" ]; then (cd \"packages/$name\" && yarn build) || exit $?; fi; done",
     "test": "vitest run",
     "test:leaks": "vitest run packages/core/tests/memory-leak.test.ts packages/core/tests/scope-leak.test.ts",
     "example": "yarn workspace examples dev",
