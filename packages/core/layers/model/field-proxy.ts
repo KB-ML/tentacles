@@ -202,7 +202,8 @@ class FieldProxy<T> {
     return (entry ? entry[this._fieldName] : undefined) as T;
   }
   get shortName() {
-    if (this._materialized) return (this._materialized as unknown as Record<string, unknown>).shortName;
+    if (this._materialized)
+      return (this._materialized as unknown as Record<string, unknown>).shortName;
     return this._fieldName;
   }
 }
