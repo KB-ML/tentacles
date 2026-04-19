@@ -1,6 +1,6 @@
 <p align="center">
   <img src="./docs/public/logo-hero-light.svg#gh-light-mode-only" alt="Tentacles" width="480" />
-  <img src="./docs/public/logo-hero-dark.svg#gh-dark-mode-only" alt="Tentacles" width="480" />
+  <img src="./docs/public/tentacles-dark.gif#gh-dark-mode-only" alt="Tentacles" width="480" />
 </p>
 
 <p align="center">
