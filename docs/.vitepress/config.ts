@@ -222,7 +222,7 @@ export default defineConfig({
   },
 
   themeConfig: {
-    logo: { light: "/tentacles-light.gif", dark: "/tentacles-dark.gif" },
+    logo: { light: "/tentacles-light.svg", dark: "/tentacles-dark.svg" },
 
     nav: [
       { text: "Tutorials", link: "/tutorials/" },

@@ -4,8 +4,8 @@ hero:
   name: Tentacles
   text: Dynamic Model Factory for Effector
   image:
-    light: /tentacles-light.gif
-    dark: /tentacles-dark.gif
+    light: /tentacles-light.svg
+    dark: /tentacles-dark.svg
     alt: Tentacles
   tagline: Type-safe contracts, reactive instances, and ORM-like queries — with full SSR support
   actions:
