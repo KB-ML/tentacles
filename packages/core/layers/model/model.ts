@@ -161,6 +161,9 @@ export class Model<
   private _autoIncrementSet!: EventCallable<Record<string, number>>;
   private _autoIncrementReset!: EventCallable<void>;
   private _hasAutoIncrement = false;
+  /** Suppress per-item `_autoIncrementSet` dispatches while running a batched path
+   *  (e.g. `handleCreateMany`); the caller fires one consolidated event at the end. */
+  private _autoIncrementSilent = false;
   private inverseSources?: Record<string, () => Model<any, any>>;
   private refTargets?: Record<string, () => Model<any, any>>;
   private _updatedWired = false;
@@ -452,23 +455,26 @@ export class Model<
       this._dataMapCleared = createEvent<void>({
         sid: `tentacles:${modelName}:__dataMap__:cleared`,
       });
+      // Hoist uniqueness check once: when the contract has no unique fields,
+      // the reducers skip the validate call entirely (one fewer function hop per mutation).
+      const hasUniqueFields = this.indexes.uniqueFields.size > 0;
       this._$dataMap = createStore<Record<string, Record<string, unknown>>>(
         {},
         { sid: `tentacles:${modelName}:__dataMap__` },
       )
         .on(this._dataMapSet, (map, { id, data }) => {
-          this.indexes.validateUniqueInsert(map, id, data);
+          if (hasUniqueFields) this.indexes.validateUniqueInsert(map, id, data);
           return { ...map, [id]: data };
         })
         .on(this._dataMapSetMany, (map, entries) => {
-          this.indexes.validateUniqueBatch(map, entries);
+          if (hasUniqueFields) this.indexes.validateUniqueBatch(map, entries);
           return { ...map, ...entries };
         })
         .on(this._dataMapFieldUpdated, (map, { id, field, value }) => {
           const existing = map[id];
           if (!existing) return map;
           if (existing[field] === value) return map;
-          this.indexes.validateUnique(map, id, field, value);
+          if (hasUniqueFields) this.indexes.validateUnique(map, id, field, value);
           this._syncDirty = true;
           return { ...map, [id]: { ...existing, [field]: value } };
         })
@@ -847,20 +853,30 @@ export class Model<
   ): FullInstance<Contract, Generics, Ext>[] {
     if (items.length === 0) return [];
 
-    // Phase 1: resolve all data and IDs upfront
+    // Phase 1: resolve all data and IDs upfront.
+    // Silence autoincrement event dispatches per-item — fire one batched event at the end.
     const resolved: {
       id: string;
       data: Record<string, unknown>;
       storeData: Record<string, unknown>;
     }[] = [];
-    for (const item of items) {
-      this.remapFkFields(item);
-      const data = this.resolveDefaults(item);
-      const id = this.extractId(data);
-      validateInstanceId(id);
-      // Clear previous instance if replacing
-      this.clearInstance(id);
-      resolved.push({ id, data, storeData: this.buildStoreData(data) });
+    const prevAutoIncrementSilent = this._autoIncrementSilent;
+    this._autoIncrementSilent = this._hasAutoIncrement;
+    try {
+      for (const item of items) {
+        this.remapFkFields(item);
+        const data = this.resolveDefaults(item);
+        const id = this.extractId(data);
+        validateInstanceId(id);
+        // Clear previous instance if replacing
+        this.clearInstance(id);
+        resolved.push({ id, data, storeData: this.buildStoreData(data) });
+      }
+    } finally {
+      this._autoIncrementSilent = prevAutoIncrementSilent;
+    }
+    if (this._hasAutoIncrement && !prevAutoIncrementSilent) {
+      this._autoIncrementSet({ ...this.autoIncrementCounters });
     }
 
     if (this._hasInverseFields) {
@@ -2367,7 +2383,7 @@ export class Model<
           }
         }
       }
-      if (changed) {
+      if (changed && !this._autoIncrementSilent) {
         this._autoIncrementSet({ ...this.autoIncrementCounters });
       }
     }
