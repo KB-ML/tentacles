@@ -148,11 +148,6 @@ export class Model<
   private readonly computedFieldKeys: string[] = [];
   /** Pre-computed $-prefix mapping for builder fn. Avoids per-instance kind-checking. */
   private readonly prefixMapping: Array<{ from: string; to: string }> = [];
-  /** Model-level per-field set events: ONE event per state field, shared by all instances. */
-  private readonly _fieldSetEvents = new Map<
-    string,
-    EventCallable<{ id: string; value: unknown }>
-  >();
   /** Model-level events per contract event field: ONE event per event field, shared by all instances.
    *  Payload: { id: string; payload: unknown }. Per-instance events are prepends on these. */
   private readonly _modelEvents = new Map<
@@ -492,32 +487,10 @@ export class Model<
       });
       sample({ clock: this.registry.clear, target: this._dataMapCleared });
 
-      // Per-field set events: ONE model-level event per state field.
-      // Each fires { id, value } and updates $dataMap[id][field].
-      for (const key of this.stateFieldKeys) {
-        const fieldName = key;
-        const setEvent = createEvent<{ id: string; value: unknown }>();
-        this._fieldSetEvents.set(key, setEvent);
-        this._$dataMap.on(setEvent, (map, { id, value }) => {
-          const entry = map[id];
-          if (!entry || entry[fieldName] === value) return map;
-          this.indexes.validateUnique(map, id, fieldName, value);
-          this._syncDirty = true;
-          return { ...map, [id]: { ...entry, [fieldName]: value } };
-        });
-        // Fire _dataMapFieldUpdated for incremental query updates.
-        // Also update _$lastChangedField BEFORE $dataMap.on() runs (via prepend
-        // which fires at the START of the event chain, before .on() handlers).
-        sample({
-          clock: setEvent,
-          fn: ({ id, value }: { id: string; value: unknown }) => ({
-            id,
-            field: fieldName,
-            value,
-          }),
-          target: this._dataMapFieldUpdated,
-        });
-      }
+      // Per-field .set() routes directly through _dataMapFieldUpdated (the same
+      // event used by incremental query updates). The $dataMap.on(_dataMapFieldUpdated)
+      // handler above already performs unique validation + the spread, so there's no
+      // need for per-field setEvents or intermediate samples — one event, one graph hop.
 
       // Wire $index store as a derived view of $dataMap events. Per-scope
       // routing is automatic — the query layer reads scope-correct $index
@@ -656,11 +629,6 @@ export class Model<
     return this.registry.byPartialKey(...prefix);
   }
 
-  /** Get model-level field set event (used by field proxies). */
-  getFieldSetEvent(fieldName: string): EventCallable<{ id: string; value: unknown }> | undefined {
-    return this._fieldSetEvents.get(fieldName);
-  }
-
   /** Get model-level event for a contract event field (used by createUnits). */
   getModelEvent(
     eventFieldName: string,
@@ -707,8 +675,9 @@ export class Model<
     if (!this._dataMapWired) {
       this._dataMapWired = true;
       // Note: model.updated → _dataMapFieldUpdated wiring removed.
-      // The proxy .set() path fires fieldSetEvent → sample → _dataMapFieldUpdated directly.
-      // The SharedOnRegistry .on() path updates $dataMap via model-level event handlers.
+      // The proxy .set() path prepends directly onto _dataMapFieldUpdated (one event,
+      // one graph hop). The SharedOnRegistry .on() path updates $dataMap via
+      // model-level event handlers.
       //
       // Phase 5b: inverse fields are no longer mirrored into $dataMap. The
       // derived `InverseIndex.$byTarget` store is the source of truth for

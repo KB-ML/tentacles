@@ -10,7 +10,6 @@ import { createFieldProxy } from "../field-proxy";
 import type { Model } from "../model";
 import type { SidRegistry } from "../sid-registry";
 import type { ModelInstanceId } from "../types";
-import { createVirtualFieldStore } from "../virtual-field-store";
 
 /** Pre-categorized field lists passed from Model to avoid per-instance kind-checking. */
 export interface CategorizedFields {
@@ -118,56 +117,44 @@ export function createUnits(
   // Materialized into real virtual stores only on .map()/.graphite/combine access.
   const sharedOnRegistry = owningModel.getSharedOnRegistry();
   for (const key of fields.stateFieldKeys) {
-    const fieldSetEvent = owningModel.getFieldSetEvent(key);
-    if (fieldSetEvent && sharedOnRegistry) {
-      units[key] = createFieldProxy(
-        $dataMap,
-        id,
-        key,
-        fieldSetEvent,
-        sharedOnRegistry,
-        // Materialize as .map() from $dataMap with writeback for .on() support.
-        () => {
-          const fieldName = key;
-          const $derived = $dataMap.map(
-            (map) => {
-              const entry = map[id];
-              return (entry ? entry[fieldName] : undefined) as unknown;
-            },
-            { skipVoid: false },
-          ) as StoreWritable<unknown>;
-          const s = $derived as StoreWritable<unknown> & {
-            targetable: boolean;
-            graphite: { meta: { derived: number } };
-          };
-          s.targetable = true;
-          s.graphite.meta.derived = 0;
-          // Writeback: when materialized store changes (from .on() or allSettled),
-          // sync back to $dataMap so queries and serialize see the update.
-          sample({
-            clock: $derived.updates,
-            source: $dataMap,
-            fn: (map: Record<string, Record<string, unknown>>, value: unknown) => {
-              const entry = map[id];
-              if (!entry || entry[fieldName] === value) return map;
-              return { ...map, [id]: { ...entry, [fieldName]: value } };
-            },
-            target: $dataMap,
-          });
-          return s;
-        },
-        instanceToModelEvent,
-      );
-    } else {
-      units[key] = createVirtualFieldStore(
-        $dataMap,
-        getInstanceSlice(),
-        id,
-        key,
-        fieldUpdated,
-        getSliceFieldUpdate,
-      );
-    }
+    units[key] = createFieldProxy(
+      $dataMap,
+      id,
+      key,
+      fieldUpdated,
+      sharedOnRegistry,
+      // Materialize as .map() from $dataMap with writeback for .on() support.
+      () => {
+        const fieldName = key;
+        const $derived = $dataMap.map(
+          (map) => {
+            const entry = map[id];
+            return (entry ? entry[fieldName] : undefined) as unknown;
+          },
+          { skipVoid: false },
+        ) as StoreWritable<unknown>;
+        const s = $derived as StoreWritable<unknown> & {
+          targetable: boolean;
+          graphite: { meta: { derived: number } };
+        };
+        s.targetable = true;
+        s.graphite.meta.derived = 0;
+        // Writeback: when materialized store changes (from .on() or allSettled),
+        // sync back to $dataMap so queries and serialize see the update.
+        sample({
+          clock: $derived.updates,
+          source: $dataMap,
+          fn: (map: Record<string, Record<string, unknown>>, value: unknown) => {
+            const entry = map[id];
+            if (!entry || entry[fieldName] === value) return map;
+            return { ...map, [id]: { ...entry, [fieldName]: value } };
+          },
+          target: $dataMap,
+        });
+        return s;
+      },
+      instanceToModelEvent,
+    );
   }
 
   // Ref fields → ref API (many/one) with virtual $ids/$id store

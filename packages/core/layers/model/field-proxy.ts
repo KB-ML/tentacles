@@ -1,6 +1,7 @@
 import type { EventCallable, StoreWritable } from "effector";
 
 type DataMapStore = StoreWritable<Record<string, Record<string, unknown>>>;
+type FieldUpdatedEvent = EventCallable<{ id: string; field: string; value: unknown }>;
 
 /**
  * Registry for shared model-level .on() handlers.
@@ -10,7 +11,6 @@ type DataMapStore = StoreWritable<Record<string, Record<string, unknown>>>;
  * contract event serves ALL instances.
  */
 export class SharedOnRegistry {
-  // event → field → reducer
   private readonly reducers = new Map<
     EventCallable<unknown>,
     Map<string, (state: unknown, payload: unknown) => unknown>
@@ -62,11 +62,6 @@ export class SharedOnRegistry {
     }
   }
 
-  /**
-   * Register a field reducer for an event. The $dataMap.on() handler was
-   * already wired in the constructor — this just adds the field reducer
-   * to the map that the handler consults.
-   */
   register(
     clock: EventCallable<unknown>,
     fieldName: string,
@@ -80,148 +75,154 @@ export class SharedOnRegistry {
     fieldMap.set(fieldName, reducer);
   }
 
-  /** Check if a (clock, field) combination is already registered. */
   has(clock: EventCallable<unknown>, fieldName: string): boolean {
     return this.reducers.get(clock)?.has(fieldName) ?? false;
   }
 }
 
 /**
- * Creates a zero-cost proxy for a contract state field.
+ * Zero-cost proxy for a contract state field.
  *
- * NOT an effector store — no graph nodes. Delegates:
+ * NOT an effector store — no graph nodes until materialized. Delegates:
  * - .getState() → reads $dataMap (O(1), no node)
  * - .defaultState → reads $dataMap default (O(1), no node)
- * - .set(value) → fires model-level event (no per-instance node)
+ * - .set(value) → prepends on shared _dataMapFieldUpdated (1 node, created lazily)
  * - .on(event, reducer) → shared model-level $dataMap handler (no per-instance node)
  * - .map()/.graphite/combine(it) → MATERIALIZES into real store (rare, lazy)
+ *
+ * Class-based (not plain object) so methods/getters live on the prototype — allocation
+ * is O(instance fields) rather than O(methods+getters) per instance.
  */
+class FieldProxy<T> {
+  readonly kind = "store";
+  readonly targetable = true;
+
+  private _materialized: StoreWritable<T> | null = null;
+
+  constructor(
+    private readonly _dataMap: DataMapStore,
+    private readonly _instanceId: string,
+    private readonly _fieldName: string,
+    private readonly _fieldUpdated: FieldUpdatedEvent,
+    private readonly _sharedOnRegistry: SharedOnRegistry,
+    private readonly _materializeFn: () => StoreWritable<T>,
+    private readonly _instanceToModelEvent?: Map<EventCallable<unknown>, EventCallable<unknown>>,
+  ) {}
+
+  private _materialize(): StoreWritable<T> {
+    if (!this._materialized) this._materialized = this._materializeFn();
+    return this._materialized;
+  }
+
+  getState(): T {
+    if (this._materialized) return this._materialized.getState();
+    const entry = this._dataMap.getState()[this._instanceId];
+    return (entry ? entry[this._fieldName] : undefined) as T;
+  }
+
+  // .set — LAZY prepend on shared _dataMapFieldUpdated. First access creates the
+  // prepend (1 effector node) and caches it as a direct own-property, replacing
+  // this getter so subsequent reads skip the getter call entirely.
+  get set(): EventCallable<T> {
+    const id = this._instanceId;
+    const field = this._fieldName;
+    const setEvent = this._fieldUpdated.prepend((value: T) => ({ id, field, value }));
+    Object.defineProperty(this, "set", {
+      value: setEvent,
+      configurable: true,
+      writable: false,
+      enumerable: false,
+    });
+    return setEvent;
+  }
+
+  on(clock: EventCallable<unknown>, reducer: (state: T, payload: unknown) => T): this {
+    const modelEvent = this._instanceToModelEvent?.get(clock);
+    if (modelEvent) {
+      if (!this._sharedOnRegistry.has(modelEvent, this._fieldName)) {
+        this._sharedOnRegistry.register(
+          modelEvent,
+          this._fieldName,
+          reducer as (state: unknown, payload: unknown) => unknown,
+        );
+      }
+    } else {
+      this._materialize().on(clock, reducer);
+    }
+    return this;
+  }
+
+  off(clock: EventCallable<unknown>): this {
+    if (this._materialized) this._materialized.off(clock);
+    return this;
+  }
+
+  // ═══ Materialization triggers (rare — only when effector internals poke the store) ═══
+
+  get graphite() {
+    return (this._materialize() as unknown as Record<string, unknown>).graphite;
+  }
+  get sid() {
+    return this._materialized?.sid ?? null;
+  }
+  get stateRef() {
+    return (this._materialize() as unknown as Record<string, unknown>).stateRef;
+  }
+  get updates() {
+    return this._materialize().updates;
+  }
+  get subscribe() {
+    const m = this._materialize();
+    return m.subscribe.bind(m);
+  }
+  get watch() {
+    const m = this._materialize();
+    return m.watch.bind(m);
+  }
+  get map() {
+    const m = this._materialize();
+    return m.map.bind(m) as StoreWritable<T>["map"];
+  }
+  get compositeName() {
+    return (this._materialize() as unknown as Record<string, unknown>).compositeName;
+  }
+  get or() {
+    return (this._materialize() as unknown as Record<string, unknown>).or;
+  }
+  get and() {
+    return (this._materialize() as unknown as Record<string, unknown>).and;
+  }
+  get defaultState(): T {
+    if (this._materialized)
+      return (this._materialized as StoreWritable<T> & { defaultState: T }).defaultState;
+    const store = this._dataMap as DataMapStore & {
+      defaultState: Record<string, Record<string, unknown>>;
+    };
+    const entry = store.defaultState[this._instanceId];
+    return (entry ? entry[this._fieldName] : undefined) as T;
+  }
+  get shortName() {
+    if (this._materialized) return (this._materialized as unknown as Record<string, unknown>).shortName;
+    return this._fieldName;
+  }
+}
+
 export function createFieldProxy<T>(
   $dataMap: DataMapStore,
   instanceId: string,
   fieldName: string,
-  fieldSetEvent: EventCallable<{ id: string; value: unknown }>,
+  fieldUpdated: FieldUpdatedEvent,
   sharedOnRegistry: SharedOnRegistry,
   materializeFn: () => StoreWritable<T>,
   instanceToModelEvent?: Map<EventCallable<unknown>, EventCallable<unknown>>,
 ): StoreWritable<T> {
-  let _materialized: StoreWritable<T> | null = null;
-
-  function materialize(): StoreWritable<T> {
-    if (!_materialized) {
-      _materialized = materializeFn();
-    }
-    return _materialized;
-  }
-
-  const proxy: Record<string, unknown> = {
-    // ═══ Fast path — no effector nodes ═══
-
-    getState(): T {
-      if (_materialized) return _materialized.getState();
-      const entry = $dataMap.getState()[instanceId];
-      return (entry ? entry[fieldName] : undefined) as T;
-    },
-
-    // .set — LAZY prepend on model-level event. Created on first access.
-    // IS a real effector event so allSettled(inst.$field.set, { scope }) works.
-    get set() {
-      // Fast path: direct mutation + version bump (avoids O(N) $dataMap spread).
-      // The fieldSetEvent creates an effector prepend for allSettled compatibility,
-      // but for direct calls we can also offer a fast non-spreading path.
-      const setEvent = fieldSetEvent.prepend((value: T) => ({ id: instanceId, value }));
-      Object.defineProperty(proxy, "set", { value: setEvent, configurable: true });
-      return setEvent;
-    },
-
-    // .on — shared model-level handler for contract events, materialize for external events
-    on(clock: EventCallable<unknown>, reducer: (state: T, payload: unknown) => T) {
-      const modelEvent = instanceToModelEvent?.get(clock);
-      if (modelEvent) {
-        // Contract event → shared model-level $dataMap handler (no per-instance node)
-        if (!sharedOnRegistry.has(modelEvent, fieldName)) {
-          sharedOnRegistry.register(
-            modelEvent,
-            fieldName,
-            reducer as (state: unknown, payload: unknown) => unknown,
-          );
-        }
-      } else {
-        // External event (createEffect.doneData, etc.) → materialize and use real .on()
-        materialize().on(clock, reducer);
-      }
-      return proxy;
-    },
-
-    off(clock: EventCallable<unknown>) {
-      if (_materialized) _materialized.off(clock);
-      return proxy;
-    },
-
-    // ═══ Materialization triggers ═══
-
-    get kind() {
-      return "store";
-    },
-    get targetable() {
-      return true;
-    },
-    get graphite() {
-      return (materialize() as unknown as Record<string, unknown>).graphite;
-    },
-    get sid() {
-      return _materialized?.sid ?? null;
-    },
-    get stateRef() {
-      return (materialize() as unknown as Record<string, unknown>).stateRef;
-    },
-    get updates() {
-      return materialize().updates;
-    },
-    get subscribe() {
-      return materialize().subscribe.bind(materialize());
-    },
-    get watch() {
-      return materialize().watch.bind(materialize());
-    },
-    get map() {
-      return materialize().map.bind(materialize()) as StoreWritable<T>["map"];
-    },
-    get compositeName() {
-      return (materialize() as unknown as Record<string, unknown>).compositeName;
-    },
-    get or() {
-      return (materialize() as unknown as Record<string, unknown>).or;
-    },
-    get and() {
-      return (materialize() as unknown as Record<string, unknown>).and;
-    },
-    // Do NOT delegate @@unitShape to materialized store — .map() stores don't have it.
-    // Framework bindings (effector-solid, effector-react) fall through to .subscribe() path.
-  };
-
-  // .defaultState — reads from $dataMap's default state (no node)
-  Object.defineProperty(proxy, "defaultState", {
-    get(): T {
-      if (_materialized)
-        return (_materialized as StoreWritable<T> & { defaultState: T }).defaultState;
-      const store = $dataMap as DataMapStore & {
-        defaultState: Record<string, Record<string, unknown>>;
-      };
-      const entry = store.defaultState[instanceId];
-      return (entry ? entry[fieldName] : undefined) as T;
-    },
-    configurable: true,
-  });
-
-  // .shortName — combine accesses this
-  Object.defineProperty(proxy, "shortName", {
-    get() {
-      if (_materialized) return (_materialized as unknown as Record<string, unknown>).shortName;
-      return fieldName;
-    },
-    configurable: true,
-  });
-
-  return proxy as unknown as StoreWritable<T>;
+  return new FieldProxy<T>(
+    $dataMap,
+    instanceId,
+    fieldName,
+    fieldUpdated,
+    sharedOnRegistry,
+    materializeFn,
+    instanceToModelEvent,
+  ) as unknown as StoreWritable<T>;
 }
