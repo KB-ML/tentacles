@@ -1,6 +1,6 @@
 # ModelInstance
 
-A `ModelInstance` is the object returned from `Model.create` (or read through `Model.getSync`, `Model.instance`, etc.). Fields are exposed as zero-cost proxies under `$`-prefixed keys for stores and derived, raw names for events, and typed ref APIs for relationships. Metadata lives under `@@instanceId` and `@@meta`. This page documents what each accessor supports and when a proxy materialises into a real effector store.
+A `ModelInstance` is the object returned from `Model.create` (or read through `Model.get`). Fields are exposed as zero-cost proxies under `$`-prefixed keys for stores and derived, raw names for events, and typed ref APIs for relationships. Metadata lives under `@@instanceId` and `@@meta`. This page documents what each accessor supports and when a proxy materialises into a real effector store.
 
 ## Shape overview
 

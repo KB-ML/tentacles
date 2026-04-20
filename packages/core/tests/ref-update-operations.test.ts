@@ -96,7 +96,7 @@ describe("update: one ref create", () => {
 
     // create() returns instance with string PK "5"
     expect(todo.category.$id.getState()).toBe("5");
-    expect(catModel.getSync("5")!.$title.getState()).toBe("New Category");
+    expect(catModel.get("5")!.$title.getState()).toBe("New Category");
   });
 });
 
@@ -129,7 +129,7 @@ describe("update: one ref connectOrCreate", () => {
     // PK resolver returns string "3"
     expect(todo.category.$id.getState()).toBe("3");
     // Original category title preserved (didn't create/replace)
-    expect(catModel.getSync("3")!.$title.getState()).toBe("Existing");
+    expect(catModel.get("3")!.$title.getState()).toBe("Existing");
   });
 
   it("creates target when it does not exist", () => {
@@ -154,7 +154,7 @@ describe("update: one ref connectOrCreate", () => {
 
     // PK resolver returns string "99"
     expect(todo.category.$id.getState()).toBe("99");
-    expect(catModel.getSync("99")!.$title.getState()).toBe("Brand New");
+    expect(catModel.get("99")!.$title.getState()).toBe("Brand New");
   });
 });
 
@@ -263,7 +263,7 @@ describe("update: many ref set", () => {
     });
 
     expect(post.tags.$ids.getState()).toEqual(["t1", "t2"]);
-    expect(tagModel.getSync("t2")!.$label.getState()).toBe("new-tag");
+    expect(tagModel.get("t2")!.$label.getState()).toBe("new-tag");
   });
 });
 
@@ -318,7 +318,7 @@ describe("update: many ref add", () => {
     });
 
     expect(post.tags.$ids.getState()).toEqual(["t1", "t2"]);
-    expect(tagModel.getSync("t2")!.$label.getState()).toBe("maybe-new");
+    expect(tagModel.get("t2")!.$label.getState()).toBe("maybe-new");
   });
 });
 
@@ -486,7 +486,7 @@ describe("update: inverse ref operations", () => {
       category: { create: { id: "cat-new", name: "New Cat" } },
     });
 
-    const cat = categoryModel.getSync("cat-new")!;
+    const cat = categoryModel.get("cat-new")!;
     expect(cat.$name.getState()).toBe("New Cat");
     expect(cat.todos.$ids.getState()).toContain("t1");
   });
@@ -555,7 +555,7 @@ describe("update: model with only id", () => {
 
     // PK resolver returns string
     expect(parent.target.$id.getState()).toBe("42");
-    expect(simpleModel.getSync("42")).toBeDefined();
+    expect(simpleModel.get("42")).not.toBeNull();
   });
 
   it("connectOrCreate connects when exists", () => {
@@ -642,11 +642,11 @@ describe("update: plain object shortcut", () => {
     // Creates category (doesn't exist yet)
     todoModel.update(1, { category: { id: 3, title: "New" } });
     expect(todo.category.$id.getState()).toBe("3");
-    expect(catModel.getSync("3")!.$title.getState()).toBe("New");
+    expect(catModel.get("3")!.$title.getState()).toBe("New");
 
     // Connects to existing (doesn't replace)
     todoModel.update(1, { category: { id: 3, title: "Ignored" } });
-    expect(catModel.getSync("3")!.$title.getState()).toBe("New");
+    expect(catModel.get("3")!.$title.getState()).toBe("New");
   });
 
   it("many ref: plain array = add + connectOrCreate", () => {
@@ -674,8 +674,8 @@ describe("update: plain object shortcut", () => {
 
     expect(post.tags.$ids.getState()).toContain("t1");
     expect(post.tags.$ids.getState()).toContain("t2");
-    expect(tagModel.getSync("t1")!.$label.getState()).toBe("existing");
-    expect(tagModel.getSync("t2")!.$label.getState()).toBe("new");
+    expect(tagModel.get("t1")!.$label.getState()).toBe("existing");
+    expect(tagModel.get("t2")!.$label.getState()).toBe("new");
   });
 });
 
@@ -751,7 +751,7 @@ describe("create: one ref operations", () => {
     });
 
     expect(todo.category.$id.getState()).toBe("5");
-    expect(catModel.getSync("5")!.$title.getState()).toBe("New");
+    expect(catModel.get("5")!.$title.getState()).toBe("New");
   });
 
   it("connectOrCreate: connects if exists, creates if not", () => {
@@ -779,7 +779,7 @@ describe("create: one ref operations", () => {
       category: { connectOrCreate: { id: 3, title: "Ignored" } },
     });
     expect(t1.category.$id.getState()).toBe("3");
-    expect(catModel.getSync("3")!.$title.getState()).toBe("Existing");
+    expect(catModel.get("3")!.$title.getState()).toBe("Existing");
 
     // Creates new
     const t2 = todoModel.create({
@@ -788,7 +788,7 @@ describe("create: one ref operations", () => {
       category: { connectOrCreate: { id: 99, title: "Brand New" } },
     });
     expect(t2.category.$id.getState()).toBe("99");
-    expect(catModel.getSync("99")!.$title.getState()).toBe("Brand New");
+    expect(catModel.get("99")!.$title.getState()).toBe("Brand New");
   });
 
   it("plain object shortcut = connectOrCreate", () => {
@@ -810,13 +810,13 @@ describe("create: one ref operations", () => {
     // Plain object = connectOrCreate (creates if not exists)
     const todo = todoModel.create({ id: 1, title: "Task", category: { id: 7, title: "Inline" } });
     expect(todo.category.$id.getState()).toBe("7");
-    expect(catModel.getSync("7")!.$title.getState()).toBe("Inline");
+    expect(catModel.get("7")!.$title.getState()).toBe("Inline");
 
     // Second call with same data = connects to existing
     const todo2 = todoModel.create({ id: 2, title: "Task2", category: { id: 7, title: "Ignored" } });
     expect(todo2.category.$id.getState()).toBe("7");
     // Original title preserved
-    expect(catModel.getSync("7")!.$title.getState()).toBe("Inline");
+    expect(catModel.get("7")!.$title.getState()).toBe("Inline");
   });
 });
 
@@ -858,9 +858,9 @@ describe("create: many ref operations", () => {
     expect(ids).toContain("t3");
     expect(ids).toContain("t4");
 
-    expect(tagModel.getSync("t2")!.$label.getState()).toBe("created");
-    expect(tagModel.getSync("t3")!.$label.getState()).toBe("upserted");
-    expect(tagModel.getSync("t4")!.$label.getState()).toBe("explicit");
+    expect(tagModel.get("t2")!.$label.getState()).toBe("created");
+    expect(tagModel.get("t3")!.$label.getState()).toBe("upserted");
+    expect(tagModel.get("t4")!.$label.getState()).toBe("explicit");
   });
 
   it("plain array shortcut = connectOrCreate for each element", () => {
@@ -891,7 +891,7 @@ describe("create: many ref operations", () => {
 
     expect(post.tags.$ids.getState()).toContain("t1");
     expect(post.tags.$ids.getState()).toContain("t2");
-    expect(tagModel.getSync("t1")!.$label.getState()).toBe("js");
+    expect(tagModel.get("t1")!.$label.getState()).toBe("js");
 
     // Second call: connects to existing (doesn't replace)
     const post2 = postModel.create({
@@ -902,7 +902,7 @@ describe("create: many ref operations", () => {
 
     expect(post2.tags.$ids.getState()).toContain("t1");
     // Original label preserved
-    expect(tagModel.getSync("t1")!.$label.getState()).toBe("js");
+    expect(tagModel.get("t1")!.$label.getState()).toBe("js");
   });
 });
 
@@ -1053,7 +1053,7 @@ describe("create: inverse ref operations", () => {
       category: { create: { id: "cat-new", name: "New Cat" } },
     });
 
-    const cat = categoryModel.getSync("cat-new")!;
+    const cat = categoryModel.get("cat-new")!;
     expect(cat.$name.getState()).toBe("New Cat");
     expect(cat.todos.$ids.getState()).toContain("t1");
   });

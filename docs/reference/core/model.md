@@ -30,14 +30,6 @@ Model.$count: Store<number>
 
 Length of `$ids`. Derived; cheap to subscribe to.
 
-### `Model.instances()`
-
-```ts
-Model.instances(): Instance[]
-```
-
-Synchronous snapshot of all live Instance proxies in global scope, in insertion order. For large collections or reactive contexts prefer `$ids` + `Model.get(id)` so you only touch the records you render. For scoped reads, use `scope.getState(Model.$ids)` followed by `Model.get(id)`.
-
 ## Built-in effects
 
 Every mutation method has a matching `*Fx` effect. Effects are scope-aware — `fork`/`allSettled` honour them automatically.
@@ -182,32 +174,20 @@ Remove every instance. Without a scope, wipes global state. With a scope, revert
 
 ## Access methods
 
-### `Model.getSync`
-
-```ts
-getSync(id: ID): Instance | undefined
-getSync(id: ID, scope: Scope): Instance | undefined
-```
-
-O(1) cache lookup without scope. With scope, reads the scoped `$dataMap` snapshot; if the global cache is empty but the scope has data (e.g. two-process SSR), the instance is reconstructed on demand.
-
-### `Model.getByKeySync`
-
-```ts
-getByKeySync(...parts: (string | number)[]): Instance | undefined
-getByKeySync(...parts: (string | number)[], scope: Scope): Instance | undefined
-```
-
-Compound-PK variant. Accepts the key parts in contract order. The final argument may be a `Scope` — detected by the presence of a `getState` method.
-
 ### `Model.get`
 
 ```ts
-get(id: ID): Instance | null
-get(...compoundKey: (string | number)[]): Instance | null
+get(id: ID, scope?: Scope): Instance | null
+get(parts: [string | number, string | number, ...(string | number)[]], scope?: Scope): Instance | null
 ```
 
-Synchronous lookup. Returns the stable Instance proxy or `null` when the id is absent. An O(1) global-cache hit; falls back to lazy proxy reconstruction when `$dataMap` has the data but the cache is empty (typical after `fork({ values })` hydration). The reconstructed proxy is scope-independent — its `$field` stores stay scope-aware because they read from `$dataMap`.
+Single synchronous accessor. Returns the stable Instance proxy or `null` when the id is absent.
+
+- `get(id)` — scalar lookup, O(1) global-cache hit.
+- `get([a, b, ...])` — compound PK as an array.
+- `get(id, scope)` / `get([parts], scope)` — SSR-safe lookup; reads the scope's `$dataMap` and lazily reconstructs the proxy when the global cache is empty (typical after `fork({ values })` hydration on the client).
+
+The proxy is scope-independent — its `$field` stores read from the (scope-aware) `$dataMap`, so one proxy safely serves all scopes.
 
 For a reactive "does this id exist?" subscription use `Model.$idSet`:
 
@@ -218,8 +198,6 @@ const $selected = combine(
   (idSet, id) => (id != null && idSet.has(id) ? model.get(id) : null),
 )
 ```
-
-For scoped imperative reads use `Model.getSync(id, scope)` / `Model.getByKeySync(...parts, scope)`.
 
 ### `Model.query`
 

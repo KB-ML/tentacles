@@ -9,13 +9,6 @@ export interface ModelLike<Instance = unknown> {
   readonly $idSet: Store<Set<ModelInstanceId>>;
   has(id: ModelInstanceId): Store<boolean>;
   has(...parts: [string | number, string | number, ...(string | number)[]]): Store<boolean>;
-  getSync(id: ModelInstanceId, scope?: Scope): Instance | undefined;
-  getByKeySync(
-    ...parts:
-      | [string | number, string | number, ...(string | number)[]]
-      | [string | number, string | number, ...(string | number)[], Scope]
-  ): Instance | undefined;
   getRefMeta(field: string): { cardinality: "one" | "many"; target: unknown } | undefined;
-  get(id: ModelInstanceId): Instance | null;
-  get(...parts: [string | number, string | number, ...(string | number)[]]): Instance | null;
+  get(idOrParts: ModelInstanceId | readonly (string | number)[], scope?: Scope): Instance | null;
 }

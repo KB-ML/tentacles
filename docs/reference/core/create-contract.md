@@ -228,8 +228,8 @@ const post = createContract()
 
 Closes the chain and returns a frozen `FinalizedContractImpl`. The argument list is variadic:
 
-- **One field** — the PK is a scalar of that field's value type. `Model.getByKeySync(id)` expects a single argument.
-- **Two or more fields** — the PK is a compound key, represented as a tuple. `Model.getByKeySync(a, b)` expects positional arguments in the order declared.
+- **One field** — the PK is a scalar of that field's value type. Look up with `Model.get(id)`.
+- **Two or more fields** — the PK is a compound key. Look up with `Model.get([a, b])`, passing the parts as an array in the order declared.
 
 ```ts
 // Single PK

@@ -99,51 +99,6 @@ The walk is top-down (from the deepest `<Each>` ancestor upwards) — the first 
 
 **Use case**: `<Each from="posts">` inside a framework adapter. The adapter collects `ScopeEntry` entries as it descends through `<Each>` / `<View>` components and calls `resolveFrom` to translate `from="<refName>"` into an ID store it can iterate.
 
-## `validateEachProps(props)`
-
-```ts
-function validateEachProps(props: {
-  source?: unknown
-  id?: unknown
-  from?: unknown
-}): void
-```
-
-Asserts that exactly one of `source`, `id`, or `from` is provided on an `<Each>` component. Used by framework adapters to surface configuration errors early.
-
-```ts
-import { validateEachProps } from "@kbml-tentacles/core"
-
-validateEachProps({ source: idsStore })        // ok
-validateEachProps({ id: someId })              // ok
-validateEachProps({ from: "posts" })           // ok
-validateEachProps({ source: idsStore, id: 1 }) // throws — mutually exclusive
-validateEachProps({})                          // throws — nothing provided
-```
-
-**Throws** `TentaclesError` with a descriptive message when:
-
-- All three of `source`, `id`, `from` are `null`/`undefined`. The message reads `<Each> requires one of: source, id, or from prop`.
-- Two or more of them are non-`null`. The message reads `<Each> source, id, and from props are mutually exclusive`.
-
-The helper tests with `!= null`, so `source: undefined` and `source: null` are both treated as "not provided."
-
-**Use case**: `<Each>` components in every framework package call `validateEachProps({ source, id, from })` at render time so authoring mistakes produce an immediate stack trace rather than a silent no-op or a cryptic later failure.
-
-## `tentaclesWarn(message)` (not exported)
-
-```ts
-function tentaclesWarn(message: string): void
-```
-
-Internal counterpart to `TentaclesError` — writes a formatted warning to `console.warn` with the `[tentacles/core]:` prefix. Not part of the public API, but useful to know about because library-emitted warnings in the console originate here.
-
-```
-[tentacles/core]: ref "posts" has no target — pass `refs: { posts: () => postModel }` to createModel()
-```
-
-Do not rely on this helper in user code; the library reserves the right to change, remove, or rename it between versions.
-
 ## When to use these helpers
 
 | Helper | Primary consumer |
@@ -151,7 +106,6 @@ Do not rely on this helper in user code; the library reserves the right to chang
 | `detectSidRoot` | Authors of custom chain classes that need SSR-safe SIDs matching the rest of the app. |
 | `TentaclesError` | Authors of extensions that want to throw errors distinguishable from user bugs. |
 | `resolveFrom` | Authors of framework-adapter `<Each>` / `<Map>` components translating `from="refName"` to an ID store. |
-| `validateEachProps` | Authors of framework-adapter `<Each>` components doing prop validation. |
 
 If you are writing ordinary application code, you probably do not need any of these. They are documented for plugin and adapter authors, and because having a canonical home for them avoids the "stringly typed" problem of people re-implementing the same probe/validation in their own codebases.
 

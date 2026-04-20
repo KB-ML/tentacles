@@ -24,7 +24,7 @@ import { InstanceCache } from "../layers/model/instance-cache";
 // These tests simulate the two-process flow (wipe global cache after serial-
 // ising the server scope), fire `updateFx` on the client scope, and assert
 // that the resulting ref state reflects the op against the scoped data via
-// the public `getSync(id, scope)` API.
+// the public `get(id, scope)` API.
 // ─────────────────────────────────────────────────────────────────────────────
 
 function wipeGlobalCache(model: unknown): void {
@@ -70,7 +70,7 @@ describe("Phase 10 — many-ref additive updates against fork-hydrated data", ()
     });
     expect(status).toBe("done");
 
-    const list = listModel.getSync("L1", clientScope)!;
+    const list = listModel.get("L1", clientScope)!;
     const ids = clientScope.getState(list.items.$ids).map(String).sort();
     expect(ids).toEqual(["i1", "i2", "i3"]);
   });
@@ -109,7 +109,7 @@ describe("Phase 10 — many-ref additive updates against fork-hydrated data", ()
     });
     expect(status).toBe("done");
 
-    const list = listModel.getSync("L1", clientScope)!;
+    const list = listModel.get("L1", clientScope)!;
     expect(clientScope.getState(list.items.$ids).map(String).sort()).toEqual(["i1", "i2"]);
   });
 
@@ -146,7 +146,7 @@ describe("Phase 10 — many-ref additive updates against fork-hydrated data", ()
     });
     expect(status).toBe("done");
 
-    const list = listModel.getSync("L1", clientScope)!;
+    const list = listModel.get("L1", clientScope)!;
     expect(clientScope.getState(list.items.$ids).map(String).sort()).toEqual(["i1", "i3"]);
   });
 
@@ -187,7 +187,7 @@ describe("Phase 10 — many-ref additive updates against fork-hydrated data", ()
     });
     expect(status).toBe("done");
 
-    const list = listModel.getSync("L1", clientScope)!;
+    const list = listModel.get("L1", clientScope)!;
     expect(clientScope.getState(list.items.$ids).map(String).sort()).toEqual(["i2", "i3"]);
   });
 
@@ -224,7 +224,7 @@ describe("Phase 10 — many-ref additive updates against fork-hydrated data", ()
     });
     expect(status).toBe("done");
 
-    const list = listModel.getSync("L1", clientScope)!;
+    const list = listModel.get("L1", clientScope)!;
     expect(clientScope.getState(list.items.$ids).map(String)).toEqual(["i3"]);
   });
 
@@ -264,7 +264,7 @@ describe("Phase 10 — many-ref additive updates against fork-hydrated data", ()
     });
     expect(status).toBe("done");
 
-    const list = listModel.getSync("L1", clientScope)!;
+    const list = listModel.get("L1", clientScope)!;
     expect(clientScope.getState(list.items.$ids).map(String).sort()).toEqual(["i1", "i2"]);
   });
 });
@@ -308,7 +308,7 @@ describe("Phase 10 — one-ref updates against fork-hydrated data", () => {
     });
     expect(status).toBe("done");
 
-    const player = playerModel.getSync("p1", clientScope)!;
+    const player = playerModel.get("p1", clientScope)!;
     expect(String(clientScope.getState(player.team.$id))).toBe("t2");
   });
 
@@ -342,7 +342,7 @@ describe("Phase 10 — one-ref updates against fork-hydrated data", () => {
     });
     expect(status).toBe("done");
 
-    const player = playerModel.getSync("p1", clientScope)!;
+    const player = playerModel.get("p1", clientScope)!;
     expect(clientScope.getState(player.team.$id)).toBeNull();
   });
 });
@@ -371,7 +371,7 @@ describe("Phase 10 — store-field updates on cache-miss instances", () => {
     });
     expect(status).toBe("done");
 
-    const user = userModel.getSync("u1", clientScope)!;
+    const user = userModel.get("u1", clientScope)!;
     expect(clientScope.getState(user.$name)).toBe("Alicia");
     expect(clientScope.getState(user.$age)).toBe(31);
   });
@@ -448,8 +448,8 @@ describe("Phase 10 — scope isolation of update ops", () => {
     });
     expect(status).toBe("done");
 
-    const listA = listModel.getSync("L1", clientA)!;
-    const listB = listModel.getSync("L1", clientB)!;
+    const listA = listModel.get("L1", clientA)!;
+    const listB = listModel.get("L1", clientB)!;
     expect(clientA.getState(listA.items.$ids).map(String).sort()).toEqual(["i1", "i2"]);
     expect(clientB.getState(listB.items.$ids).map(String)).toEqual(["i1"]);
   });

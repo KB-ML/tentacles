@@ -29,7 +29,6 @@ export type {
 export type { ContractEntity, ContractStore } from "./layers/contract/types/contract-entity";
 export { createModel } from "./layers/model/create-model";
 export type {
-  ApplyBind,
   ApplyRefs,
   BindableFieldNames,
   CompoundKey,
@@ -83,5 +82,4 @@ export {
   createViewModel,
   resolveFrom,
   ViewModelDefinition,
-  validateEachProps,
 } from "./layers/view-model";

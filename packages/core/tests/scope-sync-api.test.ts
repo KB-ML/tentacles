@@ -12,7 +12,7 @@ function wipeGlobalCache(model: unknown): void {
   (model as { cache: InstanceCache<unknown> }).cache = new InstanceCache();
 }
 
-describe("Phase 6 — getSync(id, scope?)", () => {
+describe("Phase 6 — get(id, scope?)", () => {
   it("without scope: returns cached instance", () => {
     const contract = createContract()
       .store("id", (s) => s<string>())
@@ -21,8 +21,8 @@ describe("Phase 6 — getSync(id, scope?)", () => {
     const model = createModel({ contract, name: "p6-getSync-1" });
 
     model.create({ id: "t1", title: "Hello" });
-    const inst = model.getSync("t1" as any);
-    expect(inst).toBeDefined();
+    const inst = model.get("t1" as any);
+    expect(inst).not.toBeNull();
     expect(inst!.__id).toBe("t1");
   });
 
@@ -32,7 +32,7 @@ describe("Phase 6 — getSync(id, scope?)", () => {
       .store("title", (s) => s<string>())
       .pk("id");
     const model = createModel({ contract, name: "p6-getSync-2" });
-    expect(model.getSync("missing" as any)).toBeUndefined();
+    expect(model.get("missing" as any)).toBeNull();
   });
 
   it("with scope: reconstructs instance from scoped $dataMap", async () => {
@@ -54,8 +54,8 @@ describe("Phase 6 — getSync(id, scope?)", () => {
     const clientScope = fork({ values });
     wipeGlobalCache(model);
 
-    const inst = model.getSync("t1" as any, clientScope);
-    expect(inst).toBeDefined();
+    const inst = model.get("t1" as any, clientScope);
+    expect(inst).not.toBeNull();
     expect(inst!.__id).toBe("t1");
     expect(clientScope.getState(inst!.$title)).toBe("First");
   });
@@ -72,7 +72,7 @@ describe("Phase 6 — getSync(id, scope?)", () => {
     const clientScope = fork({ values: serialize(serverScope) });
     wipeGlobalCache(model);
 
-    expect(model.getSync("missing" as any, clientScope)).toBeUndefined();
+    expect(model.get("missing" as any, clientScope)).toBeNull();
   });
 
   it("scope isolation: same id, different scopes return different data", async () => {
@@ -93,14 +93,14 @@ describe("Phase 6 — getSync(id, scope?)", () => {
     const clientB = fork({ values: valuesB });
     wipeGlobalCache(model);
 
-    const instA = model.getSync("t1" as any, clientA);
-    const instB = model.getSync("t1" as any, clientB);
+    const instA = model.get("t1" as any, clientA);
+    const instB = model.get("t1" as any, clientB);
     expect(clientA.getState(instA!.$title)).toBe("A-title");
     expect(clientB.getState(instB!.$title)).toBe("B-title");
   });
 });
 
-describe("Phase 6 — getByKeySync with compound PK + scope", () => {
+describe("Phase 6 — get([parts], scope?) with compound PK", () => {
   it("without scope: returns cached compound-key instance", () => {
     const contract = createContract()
       .store("tenant", (s) => s<string>())
@@ -110,8 +110,8 @@ describe("Phase 6 — getByKeySync with compound PK + scope", () => {
     const model = createModel({ contract, name: "p6-compound-1" });
 
     model.create({ tenant: "acme", id: "u1", name: "Alice" });
-    const inst = model.getByKeySync("acme", "u1");
-    expect(inst).toBeDefined();
+    const inst = model.get(["acme", "u1"]);
+    expect(inst).not.toBeNull();
     expect(inst!.__id).toBe("acme\0u1");
   });
 
@@ -135,12 +135,12 @@ describe("Phase 6 — getByKeySync with compound PK + scope", () => {
     const clientScope = fork({ values: serialize(serverScope) });
     wipeGlobalCache(model);
 
-    const inst = model.getByKeySync("acme", "u1", clientScope);
-    expect(inst).toBeDefined();
+    const inst = model.get(["acme", "u1"], clientScope);
+    expect(inst).not.toBeNull();
     expect(clientScope.getState(inst!.$name)).toBe("Alice");
 
-    const other = model.getByKeySync("zeta", "u1", clientScope);
-    expect(other).toBeDefined();
+    const other = model.get(["zeta", "u1"], clientScope);
+    expect(other).not.toBeNull();
     expect(clientScope.getState(other!.$name)).toBe("Carol");
   });
 });
@@ -184,9 +184,9 @@ describe("Phase 6 — scoped updateFx ref ops over SSR-hydrated data", () => {
       params: { id: "p1", data: { team: { connect: "t2" } } as any },
     });
 
-    // Verify via getSync(scope) the ref moved
-    const p1 = playerModel.getSync("p1" as any, clientScope);
-    expect(p1).toBeDefined();
+    // Verify via get(id, scope) the ref moved
+    const p1 = playerModel.get("p1" as any, clientScope);
+    expect(p1).not.toBeNull();
     // The scoped $dataMap now has team: "t2"
     const rawData = clientScope.getState(playerModel.$ids);
     expect(rawData.map(String)).toContain("p1");
@@ -271,8 +271,8 @@ describe("Phase 6 — scoped updateFx ref ops over SSR-hydrated data", () => {
       },
     });
 
-    const p1 = playerModel.getSync("p1" as any, clientScope);
-    expect(p1).toBeDefined();
+    const p1 = playerModel.get("p1" as any, clientScope);
+    expect(p1).not.toBeNull();
     expect(clientScope.getState(p1!.$name)).toBe("Alice v2");
   });
 });

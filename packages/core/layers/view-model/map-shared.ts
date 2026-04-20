@@ -47,14 +47,3 @@ export function resolveFrom(
     `<Each from="${fieldName}">: no parent ref "${fieldName}" targeting "${modelName}" found`,
   );
 }
-
-/** Assert that exactly one of source/id/from is provided */
-export function validateEachProps(props: { source?: unknown; id?: unknown; from?: unknown }): void {
-  const count = [props.source, props.id, props.from].filter((v) => v != null).length;
-  if (count === 0) {
-    throw new TentaclesError("<Each> requires one of: source, id, or from prop");
-  }
-  if (count > 1) {
-    throw new TentaclesError("<Each> source, id, and from props are mutually exclusive");
-  }
-}

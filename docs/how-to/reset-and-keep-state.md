@@ -163,10 +163,10 @@ form.contacts.clear()
 form.contacts.$arrayError.reinit()
 ```
 
-To reset every row to its contract defaults (preserving count), call `reset()` on each row via the array's `instances()` method:
+To reset every row to its contract defaults (preserving count), iterate `$ids` and resolve each row with `get(id)`:
 
 ```ts
-form.contacts.instances().forEach((row) => row.reset())
+form.contacts.$ids.getState().forEach((id) => form.contacts.get(id)?.reset())
 ```
 
 ## See also

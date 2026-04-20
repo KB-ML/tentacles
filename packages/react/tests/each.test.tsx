@@ -198,7 +198,7 @@ describe("useModel direct", () => {
     // Separate component to avoid conditional useUnit in View
     function TitleOrNull({ todo }: { todo: unknown }) {
       if (!todo) return <div data-testid="result">null</div>;
-      const title = useUnit((todo as ReturnType<typeof model.getSync> & {}).$title);
+      const title = useUnit((todo as NonNullable<ReturnType<typeof model.get>> & {}).$title);
       return <div data-testid="result">{title}</div>;
     }
 
@@ -235,7 +235,7 @@ describe("useModel direct", () => {
 
     function TitleOrNull({ todo }: { todo: unknown }) {
       if (!todo) return <div data-testid="result">null</div>;
-      const title = useUnit((todo as ReturnType<typeof model.getSync> & {}).$title);
+      const title = useUnit((todo as NonNullable<ReturnType<typeof model.get>> & {}).$title);
       return <div data-testid="result">{title}</div>;
     }
 
@@ -458,7 +458,7 @@ describe("render-prop", () => {
     model.create({ id: "rp1", title: "RenderProp" });
 
     function ItemView({ inst }: { inst: unknown }) {
-      const title = useUnit((inst as ReturnType<typeof model.getSync> & {}).$title);
+      const title = useUnit((inst as NonNullable<ReturnType<typeof model.get>> & {}).$title);
       return <div data-testid="result">{title}</div>;
     }
 

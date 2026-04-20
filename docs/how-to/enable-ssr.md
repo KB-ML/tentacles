@@ -115,7 +115,7 @@ On the server, this is how you render components against per-request state. The 
 You can read any store that the model or one of its queries exposes:
 
 ```ts
-scope.getState(userModel.$ids).map((id) => userModel.getSync(id, scope)) // FullInstance[]
+scope.getState(userModel.$ids).map((id) => userModel.get(id, scope)) // FullInstance[]
 scope.getState(userModel.indexes.$version)             // incremented on writes
 
 // Collection queries are stores too — drive them from the same scope.

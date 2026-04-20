@@ -49,6 +49,34 @@ import { type CategorizedFields, createUnits, validateInstanceId } from "./utils
 export type { CompoundKey } from "./instance-cache";
 export type PkResult = string | number | CompoundKey;
 
+/**
+ * Internal access symbol. Consumers inside `@kbml-tentacles/core` use
+ * `model[MODEL_INTERNAL]` to reach cross-file plumbing (event dispatch,
+ * shared-on registry, ref/inverse wiring). Not exported from the package.
+ */
+export const MODEL_INTERNAL: unique symbol = Symbol("tentacles:model:internal");
+
+export interface ModelInternalSurface {
+  getModelEvent(key: string): EventCallable<{ id: string; payload: unknown }> | undefined;
+  getSharedOnRegistry(): SharedOnRegistry;
+  resolveRefTarget(
+    fieldName: string | undefined,
+    entity?: ContractRef<"many" | "one">,
+  ): Model<any, any>;
+  createRefApi(
+    cardinality: "many" | "one",
+    fieldName: string,
+    makeSid: (field: string) => string,
+    scope: Scope | undefined,
+    sourceInstanceId?: ModelInstanceId,
+    $sourceDataMap?: StoreWritable<Record<string, Record<string, unknown>>>,
+    sourceId?: string,
+    $instanceSlice?: StoreWritable<Record<string, unknown>>,
+    getSliceFieldUpdate?: () => EventCallable<{ field: string; value: unknown }> | undefined,
+  ): { api: RefManyApi | RefOneApi; registeredSids: string[] };
+  getInverseIndex(fieldName: string): InverseIndex | undefined;
+}
+
 export type CreateData<
   Contract extends Record<string, ContractEntity<ContractFieldKind, unknown>>,
   Generics extends Record<string, unknown>,
@@ -96,12 +124,6 @@ export type ApplyRefs<
   _R,
 > = Contract;
 
-/** Backwards-compat alias — the `refs` option replaces `.bind()`. */
-export type ApplyBind<
-  Contract extends Record<string, ContractEntity<ContractFieldKind, unknown>>,
-  R,
-> = ApplyRefs<Contract, R>;
-
 type FullInstance<
   Contract extends Record<string, ContractEntity<ContractFieldKind, unknown>>,
   Generics extends Record<string, unknown>,
@@ -134,7 +156,7 @@ export class Model<
   private readonly pkResolver: PrimaryKeyResolver<Contract>;
   private readonly refApiFactory: RefApiFactory;
   private readonly scopeManager: ScopeManager<Contract>;
-  private registry!: ModelRegistry<FullInstance<Contract, Generics, Ext>>;
+  private registry!: ModelRegistry;
   private effects!: ModelEffects<Contract, Generics, FullInstance<Contract, Generics, Ext>>;
   private readonly indexes: ModelIndexes;
   private readonly inverseIndexes = new Map<string, InverseIndex>();
@@ -380,7 +402,7 @@ export class Model<
       pk,
       this.cache,
       (entity: ContractRef, fieldName: string) => {
-        const target = this.resolveRefTarget(fieldName, entity);
+        const target = this.resolveRefTargetImpl(fieldName, entity);
         return { pkResolver: target.getPkResolver() };
       },
     );
@@ -430,12 +452,7 @@ export class Model<
     // $ids, $dataMap, updated event, and all model-level SIDs.
     const modelRegion = this.getModelRegion();
     withRegion(modelRegion, () => {
-      this.registry = new ModelRegistry<FullInstance<Contract, Generics, Ext>>(
-        modelName,
-        (id) => this.cache.getCompoundKey(id),
-        (id) => this.cache.get(id)?.model,
-        (id) => this.getInstanceOrReconstruct(id),
-      );
+      this.registry = new ModelRegistry(modelName, (id) => this.cache.getCompoundKey(id));
 
       this.effects = new ModelEffects<Contract, Generics, FullInstance<Contract, Generics, Ext>>(
         modelName,
@@ -599,98 +616,70 @@ export class Model<
     return this.modelName;
   }
 
-  /** Expose PK resolver for cross-model ref resolution (e.g. compound PKs from inline ref data). */
-  public getPkResolver(): PrimaryKeyResolver<Contract> {
+  /**
+   * PK resolver access for cross-model ref resolution. Same-class only —
+   * used inside Model when resolving compound PKs from inline ref data.
+   */
+  private getPkResolver(): PrimaryKeyResolver<Contract> {
     return this.pkResolver;
+  }
+
+  private _internalSurface?: ModelInternalSurface;
+  /** @internal — cross-file plumbing for `@kbml-tentacles/core`. Do not use. */
+  public get [MODEL_INTERNAL](): ModelInternalSurface {
+    if (!this._internalSurface) {
+      this._internalSurface = {
+        getModelEvent: (k) => this.getModelEventImpl(k),
+        getSharedOnRegistry: () => this.getSharedOnRegistryImpl(),
+        resolveRefTarget: (f, e) => this.resolveRefTargetImpl(f, e),
+        createRefApi: (c, f, s, sc, si, sm, sid, is, gsfu) =>
+          this.createRefApiImpl(c, f, s, sc, si, sm, sid, is, gsfu),
+        getInverseIndex: (f) => this.getInverseIndexImpl(f),
+      };
+    }
+    return this._internalSurface;
   }
 
   // ═══ Synchronous instance access ═══
 
   /**
-   * Synchronous instance lookup.
-   *
-   * Without a scope, this is an O(1) global cache lookup — the fast path used
-   * by imperative code and non-SSR callers.
-   *
-   * When `scope` is provided, the lookup reads from the scope's view of
-   * `$dataMap`, materialising the instance via `getInstanceOrReconstructScoped`
-   * if the global cache is empty. This is the correct path for server
-   * components and test code that have a `fork({values})` scope but never
-   * imperatively populated the global cache.
-   */
-  public getSync(
-    id: ModelInstanceId,
-    scope?: Scope,
-  ): FullInstance<Contract, Generics, Ext> | undefined {
-    const serializedId = String(id) as ModelInstanceId;
-    if (!scope) return this.cache.get(serializedId)?.model;
-    const dataMap = scope.getState(this._$dataMap);
-    if (!(serializedId in dataMap)) return undefined;
-    return this.getInstanceOrReconstructScoped(serializedId, dataMap);
-  }
-
-  /**
-   * Synchronous compound key lookup — O(1) against the cache (no scope) or
-   * against the scope's `$dataMap` snapshot (with scope).
-   */
-  public getByKeySync(
-    ...parts:
-      | [string | number, string | number, ...(string | number)[]]
-      | [string | number, string | number, ...(string | number)[], Scope]
-  ): FullInstance<Contract, Generics, Ext> | undefined {
-    const last = parts[parts.length - 1];
-    const hasScope = typeof last === "object" && last !== null && "getState" in (last as object);
-    const scope = hasScope ? (last as Scope) : undefined;
-    const keyParts = (hasScope ? parts.slice(0, -1) : parts) as [
-      string | number,
-      string | number,
-      ...(string | number)[],
-    ];
-
-    if (!scope) {
-      return this.cache.getByParts(...keyParts)?.model;
-    }
-    const serializedId = keyParts.map(String).join(InstanceCache.COMPOUND_PK_DELIMITER);
-    const dataMap = scope.getState(this._$dataMap);
-    if (!(serializedId in dataMap)) return undefined;
-    return this.getInstanceOrReconstructScoped(serializedId as ModelInstanceId, dataMap);
-  }
-
-  // ═══ Public query methods (reactive) ═══
-
-  /**
    * Synchronous instance lookup. Returns the stable proxy Instance or null.
    *
-   * Fast path is an O(1) global cache hit. If the id exists in `$dataMap`
-   * (e.g. after `fork({ values })`) but the global cache is empty, the
-   * proxy is lazily constructed and cached — its field stores remain
-   * scope-aware via `$dataMap`.
+   * - `get(id)` — scalar id, global-cache fast path (O(1)).
+   * - `get([a, b, ...])` — compound PK as array.
+   * - `get(id, scope)` / `get([parts], scope)` — SSR-safe lookup through the
+   *   scope's `$dataMap`; lazily reconstructs the proxy when the global cache
+   *   is empty (e.g. after `fork({ values })` hydration on the client).
+   *
+   * The proxy itself is scope-independent — its `$field` stores read from the
+   * (scope-aware) `$dataMap`, so one proxy safely serves all scopes.
    */
-  public get(id: ModelInstanceId): FullInstance<Contract, Generics, Ext> | null;
   public get(
-    ...parts: [string | number, string | number, ...(string | number)[]]
-  ): FullInstance<Contract, Generics, Ext> | null;
-  public get(...args: (string | number)[]): FullInstance<Contract, Generics, Ext> | null {
-    return this.registry.get(...(args as [string | number]));
+    idOrParts: ModelInstanceId | readonly (string | number)[],
+    scope?: Scope,
+  ): FullInstance<Contract, Generics, Ext> | null {
+    const serializedId = Array.isArray(idOrParts)
+      ? idOrParts.map(String).join(InstanceCache.COMPOUND_PK_DELIMITER)
+      : String(idOrParts);
+
+    if (!scope) {
+      const cached = this.cache.get(serializedId as ModelInstanceId);
+      if (cached) return cached.model;
+      return this.getInstanceOrReconstruct(serializedId as ModelInstanceId) ?? null;
+    }
+
+    const dataMap = scope.getState(this._$dataMap);
+    if (!(serializedId in dataMap)) return null;
+    return this.getInstanceOrReconstructScoped(serializedId as ModelInstanceId, dataMap) ?? null;
   }
 
-  /**
-   * Synchronous list of all live Instance proxies (global scope).
-   * For scoped reads, use `scope.getState(model.$ids)` + `model.get(id)`.
-   */
-  public instances(): FullInstance<Contract, Generics, Ext>[] {
-    return this.registry.instances();
-  }
-
-  /** Get model-level event for a contract event field (used by createUnits). */
-  getModelEvent(
+  private getModelEventImpl(
     eventFieldName: string,
   ): EventCallable<{ id: string; payload: unknown }> | undefined {
     return this._modelEvents.get(eventFieldName);
   }
 
-  /** Get shared .on() registry (used by field proxies). */
-  getSharedOnRegistry(): SharedOnRegistry {
+  private getSharedOnRegistryImpl(): SharedOnRegistry {
     return this._sharedOnRegistry!;
   }
 
@@ -1059,12 +1048,12 @@ export class Model<
     const ref = entity as ContractRef;
     return {
       cardinality: ref.cardinality,
-      target: this.resolveRefTarget(fieldName, ref),
+      target: this.resolveRefTargetImpl(fieldName, ref),
     };
   }
 
   /** Resolve ref target: refTargets config > contract thunk > self (self-ref) */
-  resolveRefTarget(
+  private resolveRefTargetImpl(
     fieldName: string | undefined,
     entity?: ContractRef<"many" | "one">,
   ): Model<any, any> {
@@ -1088,9 +1077,7 @@ export class Model<
     );
   }
 
-  // ═══ Used by createUnits (ref creation) ═══
-
-  createRefApi(
+  private createRefApiImpl(
     cardinality: "many" | "one",
     fieldName: string,
     makeSid: (field: string) => string,
@@ -1114,9 +1101,7 @@ export class Model<
     );
   }
 
-  // ═══ Used by createUnits (inverse creation) ═══
-
-  getInverseIndex(fieldName: string): InverseIndex | undefined {
+  private getInverseIndexImpl(fieldName: string): InverseIndex | undefined {
     this.resolveInverses();
     return this.inverseIndexes.get(fieldName);
   }
@@ -1347,7 +1332,7 @@ export class Model<
       if (value === undefined) continue;
 
       const refEntity = entity as ContractRef;
-      const targetModel = this.resolveRefTarget(key, refEntity);
+      const targetModel = this.resolveRefTargetImpl(key, refEntity);
       const refApi = units[key] as RefManyApi | RefOneApi;
       const cardinality = refEntity.cardinality as "many" | "one";
 
@@ -1470,7 +1455,7 @@ export class Model<
   ): unknown {
     if (value == null) return null;
 
-    const targetModel = this.resolveRefTarget(fieldKey, refEntity);
+    const targetModel = this.resolveRefTargetImpl(fieldKey, refEntity);
 
     if (refEntity.cardinality === "one") {
       return this.resolveScopedOneRef(value, targetModel);
@@ -1791,7 +1776,7 @@ export class Model<
       const targetIds = this.getRefTargetIds(refEntity, entry.units[key] as RefManyApi | RefOneApi);
       if (targetIds.length > 0) {
         cascadeTargets.push({
-          model: this.resolveRefTarget(key, refEntity),
+          model: this.resolveRefTargetImpl(key, refEntity),
           ids: targetIds,
         });
       }
@@ -1809,7 +1794,7 @@ export class Model<
         const entity = this.contract[key];
         if (!entity || entity.kind !== ContractFieldKind.Ref) continue;
         const refEntity = entity as ContractRef;
-        const targetModel = this.resolveRefTarget(key, refEntity);
+        const targetModel = this.resolveRefTargetImpl(key, refEntity);
         const refApi = entry.units[key] as { __refEntry?: ManyEntry | OneEntry };
         const refEntry = refApi?.__refEntry;
         if (refEntry) {
@@ -1908,7 +1893,7 @@ export class Model<
       }
 
       if (policy === "cascade") {
-        const targetModel = this.resolveRefTarget(fieldName, refEntity);
+        const targetModel = this.resolveRefTargetImpl(fieldName, refEntity);
         // Cross-model cascade: we can't obtain the target model's scoped
         // $dataMap without a scope handle, so cascade recursion reads the
         // target's global snapshot. This is acceptable because cascade
@@ -1968,7 +1953,7 @@ export class Model<
 
       if (targetIds.length > 0) {
         result.push({
-          model: this.resolveRefTarget(key, refEntity),
+          model: this.resolveRefTargetImpl(key, refEntity),
           ids: targetIds,
         });
       }
@@ -2003,7 +1988,7 @@ export class Model<
       const targetIds = this.getRefTargetIds(refEntity, entry.units[key] as RefManyApi | RefOneApi);
       if (targetIds.length > 0) {
         cascadeTargets.push({
-          model: this.resolveRefTarget(key, refEntity),
+          model: this.resolveRefTargetImpl(key, refEntity),
           ids: targetIds,
         });
       }
@@ -2489,7 +2474,7 @@ export class Model<
 
     const resolveViaTarget = (obj: Record<string, unknown>): ModelInstanceId | undefined => {
       if (!refEntity) return undefined;
-      const target = this.resolveRefTarget(fieldName, refEntity);
+      const target = this.resolveRefTargetImpl(fieldName, refEntity);
       const raw = target.pkResolver.resolveRaw(obj);
       // Compound keys can't populate a single FK store field
       if (Array.isArray(raw)) return undefined;
@@ -2614,7 +2599,7 @@ export class Model<
       if (refValue == null) continue;
 
       const refEntity = entity as ContractRef;
-      const targetModel = this.resolveRefTarget(key, refEntity);
+      const targetModel = this.resolveRefTargetImpl(key, refEntity);
       const refApi = units[key] as RefManyApi | RefOneApi;
 
       if (refEntity.cardinality === "many") {

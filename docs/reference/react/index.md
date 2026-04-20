@@ -37,7 +37,7 @@ React 18 is required because the adapter relies on `useSyncExternalStore` semant
 |---|---|
 | `ViewProps<Shape>` | Props of `<View>`: `{ model, props?, children? }`. |
 | `EachProps<Instance>` | Props of `<Each>`: `{ model, source?, id?, from?, fallback?, children? }`. |
-| `ModelLike<Instance>` | Structural subset of `Model`: `{ name, $ids, $idSet, get(id), get(...parts), getSync(id), getByKeySync(...parts), getRefMeta(field) }`. Accepted everywhere a model is required. |
+| `ModelLike<Instance>` | Structural subset of `Model`: `{ name, $ids, $idSet, has, get(id \| [parts], scope?), getRefMeta(field) }`. Accepted everywhere a model is required. |
 
 ## Lifecycle contract
 

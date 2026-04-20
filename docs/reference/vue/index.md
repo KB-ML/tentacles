@@ -35,7 +35,7 @@ Vue 3.3+ is required for the typed `defineProps`/`defineEmits` and the `Injectio
 
 | Type | Description |
 |---|---|
-| `ModelLike<Instance>` | Structural subset of `Model`: `{ name, $ids, $idSet, get(id), get(...parts), getSync(id), getByKeySync(...parts), getRefMeta(field) }`. |
+| `ModelLike<Instance>` | Structural subset of `Model`: `{ name, $ids, $idSet, has, get(id \| [parts], scope?), getRefMeta(field) }`. |
 
 ## Lifecycle contract
 

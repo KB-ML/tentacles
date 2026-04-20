@@ -1,6 +1,6 @@
 export { createViewModel } from "./create-view-model";
 export type { ResolvedRef, ScopeEntry } from "./map-shared";
-export { resolveFrom, validateEachProps } from "./map-shared";
+export { resolveFrom } from "./map-shared";
 export type {
   AnyPropMeta,
   ExtractFrameworkProps,

@@ -138,8 +138,8 @@ describe("COLD: cache lookup", () => {
   }
   let counter = 0;
 
-  bench("getSync(id) on 1k pool", () => {
-    model.getSync(ids[counter % 1_000]!);
+  bench("get(id) on 1k pool", () => {
+    model.get(ids[counter % 1_000]!);
     counter++;
   });
 });

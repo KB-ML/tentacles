@@ -166,9 +166,9 @@ describe("$store.set: SSR (fork/serialize/hydrate)", () => {
     // Client: hydrate
     const clientScope = fork({ values });
 
-    // Access instance via model.getSync() — triggers reconstruction from scope's $dataMap
-    const inst = model.getSync("t1", clientScope);
-    expect(inst).not.toBeUndefined();
+    // Access instance via model.get() — triggers reconstruction from scope's $dataMap
+    const inst = model.get("t1", clientScope);
+    expect(inst).not.toBeNull();
 
     // The critical test: .set works on the reconstructed instance
     await allSettled(inst!.$done.set, { scope: clientScope, params: true });
@@ -184,7 +184,7 @@ describe("$store.set: SSR (fork/serialize/hydrate)", () => {
     model.clear();
 
     const clientScope = fork({ values });
-    const inst = model.getSync("t1", clientScope);
+    const inst = model.get("t1", clientScope);
     expect(inst).not.toBeNull();
 
     let watchValue: boolean | undefined;
@@ -210,7 +210,7 @@ describe("$store.set: SSR (fork/serialize/hydrate)", () => {
     model.clear();
 
     const clientScope = fork({ values });
-    const inst = model.getSync("t1", clientScope);
+    const inst = model.get("t1", clientScope);
 
     // Set to true
     await allSettled(inst!.$done.set, { scope: clientScope, params: true });
@@ -231,8 +231,8 @@ describe("$store.set: SSR (fork/serialize/hydrate)", () => {
     model.clear();
 
     const clientScope = fork({ values });
-    const inst1 = model.getSync("t1", clientScope);
-    const inst2 = model.getSync("t2", clientScope);
+    const inst1 = model.get("t1", clientScope);
+    const inst2 = model.get("t2", clientScope);
 
     await allSettled(inst1!.$done.set, { scope: clientScope, params: true });
     expect(clientScope.getState(inst1!.$done)).toBe(true);
@@ -296,7 +296,7 @@ describe("$store.set: .on() handler wiring after reconstruction", () => {
     model.clear();
 
     const clientScope = fork({ values });
-    const inst = model.getSync("c1", clientScope);
+    const inst = model.get("c1", clientScope);
     expect(inst).not.toBeNull();
 
     // Increment should work via .on() handler
@@ -325,7 +325,7 @@ describe("$store.set: .on() handler wiring after reconstruction", () => {
     model.clear();
 
     const clientScope = fork({ values });
-    const inst = model.getSync("u1", clientScope);
+    const inst = model.get("u1", clientScope);
     expect(inst).not.toBeNull();
     expect(clientScope.getState(inst!.$fullName)).toBe("John Doe");
 

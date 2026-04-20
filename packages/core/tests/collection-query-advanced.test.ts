@@ -833,7 +833,9 @@ describe("COLLECTION QUERY ADVANCED: write terminals", () => {
 
     // Should have removed ages 25 and 30
     expect(model.$count.getState()).toBe(3);
-    const remaining = model.instances().map((i) => i.$age.getState());
+    const remaining = model.$ids
+      .getState()
+      .map((id) => model.get(id)!.$age.getState());
     expect(remaining).toContain(20);
     expect(remaining).toContain(35);
     expect(remaining).toContain(40);

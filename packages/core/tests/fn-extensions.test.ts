@@ -307,7 +307,7 @@ describe("FN EXTENSIONS: $instances and $instance", () => {
 
   it("$instances returns instances with extensions", () => {
     model.create({ id: "r1" });
-    const instances = model.instances();
+    const instances = model.$ids.getState().map((id) => model.get(id)!);
     expect(instances[0]?.$tag.getState()).toBe("default");
   });
 

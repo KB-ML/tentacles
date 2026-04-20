@@ -277,12 +277,12 @@ describe("Reactive Effects API", () => {
     it("$instances reflects all current instances", () => {
       const model = createTodoModel();
 
-      expect(model.instances()).toEqual([]);
+      expect(model.$ids.getState()).toEqual([]);
 
       model.create({ id: "t1", title: "First", done: false });
       model.create({ id: "t2", title: "Second", done: true });
 
-      const instances = model.instances();
+      const instances = model.$ids.getState().map((id) => model.get(id)!);
       expect(instances).toHaveLength(2);
       expect(instances[0]!.__id).toBe("t1");
       expect(instances[1]!.__id).toBe("t2");

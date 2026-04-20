@@ -21,7 +21,7 @@ describe("Compound PK: basic creation", () => {
 
     expect(inst.$role.getState()).toBe("admin");
     expect(typeof inst.__id).toBe("string");
-    expect(model.get("u1", "p1")).toBe(inst);
+    expect(model.get(["u1", "p1"])).toBe(inst);
 
     model.clear();
   });
@@ -55,7 +55,7 @@ describe("Compound PK: get() with positional args", () => {
     const model = createAssignmentModel();
     model.create({ userId: "u1", projectId: "p1", role: "admin" });
 
-    const found = model.get("u1", "p1");
+    const found = model.get(["u1", "p1"]);
     expect(found).not.toBeNull();
     expect(found!.$role.getState()).toBe("admin");
 
@@ -66,8 +66,8 @@ describe("Compound PK: get() with positional args", () => {
     const model = createAssignmentModel();
     model.create({ userId: "u1", projectId: "p1", role: "admin" });
 
-    expect(model.get("u1", "p999")).toBeNull();
-    expect(model.get("u999", "p1")).toBeNull();
+    expect(model.get(["u1", "p999"])).toBeNull();
+    expect(model.get(["u999", "p1"])).toBeNull();
 
     model.clear();
   });
@@ -86,8 +86,8 @@ describe("Compound PK: get() with positional args", () => {
     const model = createAssignmentModel();
     model.create({ userId: "u1", projectId: "p1", role: "admin" });
 
-    const a = model.get("u1", "p1");
-    const b = model.get("u1", "p1");
+    const a = model.get(["u1", "p1"]);
+    const b = model.get(["u1", "p1"]);
     expect(a).toBe(b);
 
     model.clear();
@@ -96,13 +96,13 @@ describe("Compound PK: get() with positional args", () => {
   it("reflects instance presence as creates and deletes occur", () => {
     const model = createAssignmentModel();
 
-    expect(model.get("u1", "p1")).toBeNull();
+    expect(model.get(["u1", "p1"])).toBeNull();
 
     const inst = model.create({ userId: "u1", projectId: "p1", role: "admin" });
-    expect(model.get("u1", "p1")).toBe(inst);
+    expect(model.get(["u1", "p1"])).toBe(inst);
 
     model.delete(inst.__id);
-    expect(model.get("u1", "p1")).toBeNull();
+    expect(model.get(["u1", "p1"])).toBeNull();
   });
 });
 
@@ -159,7 +159,7 @@ describe("Compound PK: delete", () => {
 
     model.delete(id);
 
-    expect(model.get("u1", "p1")).toBeNull();
+    expect(model.get(["u1", "p1"])).toBeNull();
     expect(model.$ids.getState()).toEqual([]);
     expect(model.$pkeys.getState()).toEqual([]);
   });
@@ -173,7 +173,7 @@ describe("Compound PK: delete", () => {
 
     expect(model.$ids.getState()).toEqual([]);
     expect(model.$pkeys.getState()).toEqual([]);
-    expect(model.get("u1", "p1")).toBeNull();
+    expect(model.get(["u1", "p1"])).toBeNull();
   });
 });
 
@@ -323,9 +323,9 @@ describe("Compound PK: createMany", () => {
     expect(model.$ids.getState()).toHaveLength(3);
     expect(model.$pkeys.getState()).toHaveLength(3);
 
-    expect(model.get("u1", "p1")).not.toBeNull();
-    expect(model.get("u1", "p2")).not.toBeNull();
-    expect(model.get("u2", "p1")).not.toBeNull();
+    expect(model.get(["u1", "p1"])).not.toBeNull();
+    expect(model.get(["u1", "p2"])).not.toBeNull();
+    expect(model.get(["u2", "p1"])).not.toBeNull();
 
     model.clear();
   });
@@ -349,7 +349,7 @@ describe("Compound PK: 3-part compound key", () => {
     model.create({ org: "acme", team: "eng", userId: "u2", role: "member" });
     model.create({ org: "acme", team: "sales", userId: "u1", role: "member" });
 
-    const inst = model.get("acme", "eng", "u1");
+    const inst = model.get(["acme", "eng", "u1"]);
     expect(inst).not.toBeNull();
     expect(inst!.$role.getState()).toBe("lead");
 

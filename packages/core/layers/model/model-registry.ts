@@ -1,8 +1,8 @@
 import { createEvent, createStore, type EventCallable, type Store } from "effector";
-import { type CompoundKey, InstanceCache } from "./instance-cache";
+import type { CompoundKey } from "./instance-cache";
 import type { ModelInstanceId } from "./types";
 
-export class ModelRegistry<Instance> {
+export class ModelRegistry {
   public readonly $ids: Store<ModelInstanceId[]>;
 
   public readonly add: EventCallable<ModelInstanceId>;
@@ -19,22 +19,9 @@ export class ModelRegistry<Instance> {
   private readonly _hasStores = new Map<string, Store<boolean>>();
 
   private readonly getCompoundKey: (id: string) => CompoundKey | undefined;
-  private readonly getInstance: (id: ModelInstanceId) => Instance | undefined;
-  /**
-   * Reconstructs from the global `$dataMap` if needed. Used by the sync
-   * `.get()` / `.instances()` APIs.
-   */
-  private readonly getInstanceOrReconstruct: (id: ModelInstanceId) => Instance | undefined;
 
-  constructor(
-    modelName: string,
-    getCompoundKey: (id: string) => CompoundKey | undefined,
-    getInstance: (id: ModelInstanceId) => Instance | undefined,
-    getInstanceOrReconstruct: (id: ModelInstanceId) => Instance | undefined,
-  ) {
+  constructor(modelName: string, getCompoundKey: (id: string) => CompoundKey | undefined) {
     this.getCompoundKey = getCompoundKey;
-    this.getInstance = getInstance;
-    this.getInstanceOrReconstruct = getInstanceOrReconstruct;
 
     this.add = createEvent<ModelInstanceId>();
     this.addMany = createEvent<ModelInstanceId[]>();
@@ -164,47 +151,5 @@ export class ModelRegistry<Instance> {
     const store = proxy as unknown as Store<boolean>;
     this._hasStores.set(key, store);
     return store;
-  }
-
-  /**
-   * Synchronous instance lookup. Returns the stable proxy Instance or null.
-   *
-   * - Fast path: global cache hit.
-   * - Otherwise: if `$dataMap` has data for this id (e.g. after
-   *   `fork({ values })` hydration), reconstructs and caches the proxy.
-   *
-   * Instance field stores are scope-aware via `$dataMap`, so a single proxy
-   * safely serves all scopes.
-   */
-  get(id: ModelInstanceId): Instance | null;
-  get(...parts: [string | number, string | number, ...(string | number)[]]): Instance | null;
-  get(...args: (string | number)[]): Instance | null {
-    const serializedId =
-      args.length === 1
-        ? String(args[0])
-        : args.map(String).join(InstanceCache.COMPOUND_PK_DELIMITER);
-    const cached = this.getInstance(serializedId);
-    if (cached) return cached;
-    const reconstructed = this.getInstanceOrReconstruct(serializedId);
-    return reconstructed ?? null;
-  }
-
-  /**
-   * Synchronous list of all live Instance proxies (global scope).
-   * For scoped reads, use `scope.getState(model.$ids)` + `model.get(id)`.
-   */
-  instances(): Instance[] {
-    const ids = this.$ids.getState();
-    const out: Instance[] = [];
-    for (const id of ids) {
-      const cached = this.getInstance(id);
-      if (cached) {
-        out.push(cached);
-        continue;
-      }
-      const reconstructed = this.getInstanceOrReconstruct(id);
-      if (reconstructed) out.push(reconstructed);
-    }
-    return out;
   }
 }

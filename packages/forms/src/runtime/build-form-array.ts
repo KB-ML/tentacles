@@ -540,7 +540,6 @@ export function buildFormArray<Row extends Record<string, unknown>>(
     $ids: rowModel.$ids,
     $count: rowModel.$count,
     get: rowModel.get.bind(rowModel),
-    instances: rowModel.instances.bind(rowModel),
     createFx: rowModel.createFx,
     createManyFx: rowModel.createManyFx,
     deleteFx: rowModel.deleteFx,

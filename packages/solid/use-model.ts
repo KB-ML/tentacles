@@ -35,9 +35,7 @@ function useModelById<Instance>(
   const scope = useProvidedScope();
   return createMemo(() => {
     if (!present()) return null;
-    return scope
-      ? ((model.getSync(id, scope) as Instance | undefined) ?? null)
-      : ((model.get(id) as Instance) ?? null);
+    return (model.get(id, scope ?? undefined) as Instance | null) ?? null;
   });
 }
 
@@ -50,9 +48,7 @@ function useModelByKey<Instance>(
   const scope = useProvidedScope();
   return createMemo(() => {
     if (!present()) return null;
-    return scope
-      ? ((model.getByKeySync(...parts, scope) as Instance | undefined) ?? null)
-      : ((model.get(...parts) as Instance) ?? null);
+    return (model.get(parts, scope ?? undefined) as Instance | null) ?? null;
   });
 }
 
@@ -69,9 +65,7 @@ function useModelReactive<Instance>(
     if (id == null) return null;
     const ids = idsAccessor() as ModelInstanceId[];
     if (!ids.includes(id) && !ids.includes(String(id))) return null;
-    return scope
-      ? ((model.getSync(id, scope) as Instance | undefined) ?? null)
-      : ((model.get(id) as Instance) ?? null);
+    return (model.get(id, scope ?? undefined) as Instance | null) ?? null;
   });
 }
 

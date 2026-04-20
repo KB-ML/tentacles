@@ -143,7 +143,7 @@ const membershipContract = createContract()
   .pk("userId", "tenantId")
 ```
 
-With a compound PK, each instance is uniquely identified by the tuple `[userId, tenantId]`. Use `Model.getByKeySync(userId, tenantId)` (or `Model.get(userId, tenantId)` on the global cache) to look up instances.
+With a compound PK, each instance is uniquely identified by the tuple `[userId, tenantId]`. Pass the key parts as an array: `Model.get([userId, tenantId])` (and `Model.get([userId, tenantId], scope)` for scope-aware reads).
 
 `.pk()` returns a `FinalizedContractImpl<Stores, Events, Derived, Refs, PkFields>`. This object has no chain methods — it is a frozen schema ready for `createModel`. The finalized contract also captures:
 

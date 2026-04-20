@@ -109,10 +109,10 @@ interface ModelLike<Instance> {
   readonly name: string;
   readonly $ids: Store<ModelInstanceId[]>;
   readonly $idSet: Store<Set<ModelInstanceId>>;
-  get(id: ModelInstanceId): Instance | null;
-  get(...parts: [string | number, string | number, ...(string | number)[]]): Instance | null;
-  getSync(id: ModelInstanceId): Instance | undefined;
-  getByKeySync(...parts: [string | number, string | number, ...(string | number)[]]): Instance | undefined;
+  get(
+    idOrParts: ModelInstanceId | readonly (string | number)[],
+    scope?: Scope,
+  ): Instance | null;
   getRefMeta(field: string): { cardinality: "one" | "many"; target: unknown } | undefined;
 }
 ```

@@ -158,7 +158,6 @@ describe("form arrays", () => {
 
     expect(form.items.$ids).toBeDefined();
     expect(form.items.$count).toBeDefined();
-    expect(form.items.instances()).toBeDefined();
     expect(typeof form.items.get).toBe("function");
 
     const ids = form.items.$ids.getState();

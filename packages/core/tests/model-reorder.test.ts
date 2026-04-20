@@ -42,7 +42,7 @@ describe("model.reorder", () => {
 
     model.reorder(["z", "x", "y"]);
 
-    const instances = model.instances();
+    const instances = model.$ids.getState().map((id) => model.get(id)!);
     expect(instances.map((i) => i.__id)).toEqual(["z", "x", "y"]);
     expect(instances.map((i) => i.$value.getState())).toEqual([30, 10, 20]);
   });

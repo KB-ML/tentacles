@@ -162,9 +162,7 @@ function EachItem<Instance>(props: {
   // disappears — we intentionally do NOT subscribe to $idSet here.
   const scope = useProvidedScope();
   const instance = createMemo(() => {
-    return scope
-      ? ((props.model.getSync(props.id, scope) as Instance | undefined) ?? null)
-      : ((props.model.get(props.id) as Instance) ?? null);
+    return (props.model.get(props.id, scope ?? undefined) as Instance | null) ?? null;
   });
 
   const stack = createMemo<readonly ScopeEntry[]>(() => {
@@ -202,9 +200,7 @@ function EachStaticId<Instance>(props: {
   const scope = useProvidedScope();
   const instance = createMemo(() => {
     if (!present()) return null;
-    return scope
-      ? ((props.model.getSync(props.id, scope) as Instance | undefined) ?? null)
-      : ((props.model.get(props.id) as Instance) ?? null);
+    return (props.model.get(props.id, scope ?? undefined) as Instance | null) ?? null;
   });
 
   const stack = createMemo<readonly ScopeEntry[]>(() => {

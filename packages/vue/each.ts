@@ -21,7 +21,7 @@ import type { ModelInstanceId, ModelLike } from "./types";
 
 /**
  * Mirrors effector-vue/composition's internal scope resolution so we can pass
- * the current scope to `model.getSync`. See `packages/vue/use-model.ts`.
+ * the current scope to `model.get`. See `packages/vue/use-model.ts`.
  */
 function useProvidedScope(): Scope | null {
   const instance = getCurrentInstance();
@@ -168,7 +168,7 @@ const EachItem = defineComponent({
     const scope = useProvidedScope();
     const id = props.id as ModelInstanceId;
     const instance = computed(() => {
-      return scope ? (model.getSync(id, scope) ?? null) : (model.get(id) ?? null);
+      return model.get(id, scope ?? undefined) ?? null;
     });
 
     // Provide context when instance exists
@@ -213,7 +213,7 @@ function setupEachStaticId(
   const scope = useProvidedScope();
   const instance = computed(() => {
     if (!presentRef.value) return null;
-    return scope ? (model.getSync(id, scope) ?? null) : (model.get(id) ?? null);
+    return model.get(id, scope ?? undefined) ?? null;
   });
   const modelKey = getModelContext(model);
 
@@ -259,7 +259,7 @@ function setupEachReactiveId(
   const $inst = computed(() => {
     const id = resolvedId.value as ModelInstanceId | null;
     if (id == null) return null;
-    return (scope ? model.getSync(id, scope) : model.getSync(id)) ?? null;
+    return model.get(id, scope ?? undefined) ?? null;
   });
 
   const modelKey = getModelContext(model);

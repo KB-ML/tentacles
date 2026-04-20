@@ -260,10 +260,10 @@ import { markRaw, ref } from "vue"
 const selected = ref<TodoInstance | null>(null)
 
 // Right — markRaw preserves effector's internals
-const selected = ref<TodoInstance | null>(markRaw(todoModel.getSync(id)))
+const selected = ref<TodoInstance | null>(markRaw(todoModel.get(id)))
 ```
 
-The rule: anything returned from `Model.getSync(id)`, `definition.instantiate()`, or exposed as a `Shape` should be passed through `markRaw` before being stored in Vue reactive state.
+The rule: anything returned from `Model.get(id)`, `definition.instantiate()`, or exposed as a `Shape` should be passed through `markRaw` before being stored in Vue reactive state.
 
 ## 8. Troubleshooting
 

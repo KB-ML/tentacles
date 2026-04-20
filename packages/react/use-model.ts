@@ -39,7 +39,7 @@ function useModelById<Instance>(model: ModelLike<Instance>, id: ModelInstanceId)
   const present = useUnit($present);
   const scope = useProvidedScope();
   if (!present) return null;
-  return scope ? (model.getSync(id, scope) ?? null) : model.get(id);
+  return model.get(id, scope ?? undefined);
 }
 
 function useModelByKey<Instance>(
@@ -51,7 +51,7 @@ function useModelByKey<Instance>(
   const present = useUnit($present);
   const scope = useProvidedScope();
   if (!present) return null;
-  return scope ? (model.getByKeySync(...parts, scope) ?? null) : model.get(...parts);
+  return model.get(parts, scope ?? undefined);
 }
 
 function useModelReactive<Instance>(
@@ -65,7 +65,7 @@ function useModelReactive<Instance>(
   const scope = useProvidedScope();
   if (id == null) return null;
   if (!present) return null;
-  return scope ? (model.getSync(id, scope) ?? null) : model.get(id);
+  return model.get(id, scope ?? undefined);
 }
 
 // ═══ Public overloads ═══

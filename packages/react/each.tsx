@@ -142,7 +142,7 @@ const EachItem = memo(
     // re-emissions from query stores), causing every row to re-render on
     // any change anywhere.
     const scope = useProvidedScope();
-    const instance = scope ? (model.getSync(id, scope) ?? null) : model.get(id);
+    const instance = model.get(id, scope ?? undefined);
 
     const stack = useMemo(
       () =>
@@ -184,7 +184,7 @@ function EachStaticId<Instance>({ model, id, children }: EachStaticIdProps<Insta
   const $present = useMemo(() => model.has(id), [model, id]);
   const present = useUnit($present);
   const scope = useProvidedScope();
-  const instance = present ? (scope ? (model.getSync(id, scope) ?? null) : model.get(id)) : null;
+  const instance = present ? model.get(id, scope ?? undefined) : null;
 
   // All hooks above — safe to early-return below
   const stack = useMemo(

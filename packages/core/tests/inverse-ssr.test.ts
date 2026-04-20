@@ -74,8 +74,8 @@ describe("Phase 5b — inverse refs over SSR-hydrated fork({values})", () => {
     wipeGlobalCache(playerModel);
     wipeGlobalCache(teamModel);
 
-    const team1 = teamModel.getSync("t1", clientScope);
-    const team2 = teamModel.getSync("t2", clientScope);
+    const team1 = teamModel.get("t1", clientScope);
+    const team2 = teamModel.get("t2", clientScope);
     expect(team1).not.toBeNull();
     expect(team2).not.toBeNull();
 
@@ -114,7 +114,7 @@ describe("Phase 5b — inverse refs over SSR-hydrated fork({values})", () => {
     wipeGlobalCache(playerModel);
     wipeGlobalCache(teamModel);
 
-    const team2 = teamModel.getSync("t2", clientScope);
+    const team2 = teamModel.get("t2", clientScope);
     expect(team2).not.toBeNull();
     expect(clientScope.getState(team2!.$roster)).toEqual([]);
   });
@@ -155,8 +155,8 @@ describe("Phase 5b — inverse refs over SSR-hydrated fork({values})", () => {
     wipeGlobalCache(playerModel);
     wipeGlobalCache(teamModel);
 
-    const teamA = teamModel.getSync("t1", clientA);
-    const teamB = teamModel.getSync("t1", clientB);
+    const teamA = teamModel.get("t1", clientA);
+    const teamB = teamModel.get("t1", clientB);
     expect(teamA).not.toBeNull();
     expect(teamB).not.toBeNull();
 
@@ -215,8 +215,8 @@ describe("Phase 5b — inverse refs over SSR-hydrated fork({values})", () => {
     wipeGlobalCache(playlistModel);
     wipeGlobalCache(songModel);
 
-    const s1 = songModel.getSync("s1", clientScope);
-    const s2 = songModel.getSync("s2", clientScope);
+    const s1 = songModel.get("s1", clientScope);
+    const s2 = songModel.get("s2", clientScope);
     expect(s1).not.toBeNull();
     expect(s2).not.toBeNull();
 

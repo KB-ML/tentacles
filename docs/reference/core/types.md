@@ -100,7 +100,7 @@ Used at runtime to discriminate field descriptors. This is the only runtime expo
 
 ## Model layer
 
-### `ApplyRefs<Contract, R>` (alias: `ApplyBind<Contract, R>`)
+### `ApplyRefs<Contract, R>`
 
 Given a contract record and a `refs: { refName: () => Model }` config, produces a contract record where ref targets are substituted with the configured model types. Kept as an identity at the value level to avoid circular type inference across bidirectional relationships; the runtime still enforces ref/inverse target configuration.
 

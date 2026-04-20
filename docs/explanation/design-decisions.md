@@ -338,9 +338,9 @@ For most users this is not a real cost; effector releases are not disruptive, an
 
 For users with older codebases, the upgrade path is straightforward (effector's migration guide is short), and they pick up other improvements along the way.
 
-## Zero boilerplate — the shape of a contract is enough to generate `$ids`, `$count`, `instances()`, `createFx`
+## Zero boilerplate — the shape of a contract is enough to generate `$ids`, `$count`, `get()`, `createFx`
 
-When you declare a contract and call `createModel({ contract })`, you immediately have `bookModel.$ids`, `bookModel.$count`, `bookModel.instances()`, `bookModel.createFx`, `bookModel.created`, and a dozen other units.
+When you declare a contract and call `createModel({ contract })`, you immediately have `bookModel.$ids`, `bookModel.$count`, `bookModel.get(id)`, `bookModel.createFx`, `bookModel.created`, and a dozen other units.
 
 You did not ask for them. They are generated from the contract's shape.
 
@@ -564,9 +564,9 @@ Contracts are reusable units; models are disposable instances of them.
 
 Thinking about them separately makes testing easier and enables patterns the single-model case would not support.
 
-## Sync `instances()` instead of a `Store<Instance[]>`
+## One `get(id, scope?)` instead of a `Store<Instance[]>`
 
-`Model.instances()` is a synchronous method, not a store.
+Instance access is a single synchronous verb: `Model.get(id, scope?)`.
 
 Instance proxies are stable objects whose reactivity lives in per-field `$field` stores. Wrapping them in a `Store<Instance[]>` layered stores-of-stores without adding any signal we do not already get from `$ids` (membership) and the field stores themselves.
 
@@ -583,7 +583,7 @@ Most callers want one of two things:
 - "Is this id in the collection?" — answered by `$idSet` (O(1) reactive membership)
 - "Give me the Instance for this id right now" — answered by `get(id)` (synchronous)
 
-For scoped reads the `getSync(id, scope)` / `getByKeySync(...parts, scope)` variants route through `scope.getState($dataMap)`. Inside `combine` / `sample` you already receive a scope-correct `$dataMap`, so `combine($ids, ...fields, (ids, ...) => ids.map(model.get))` is both cheap and correct.
+For scoped reads, `get(id, scope)` routes through `scope.getState($dataMap)` and lazily reconstructs the proxy when the global cache is empty. Inside `combine` / `sample` you already receive a scope-correct `$dataMap`, so `combine($ids, ...fields, (ids, ...) => ids.map(model.get))` is both cheap and correct.
 
 ## Summary
 

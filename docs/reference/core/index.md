@@ -66,7 +66,6 @@ pnpm add @kbml-tentacles/core effector
 | [`createViewModel`](/reference/core/create-view-model) | function | Build a `ViewModelDefinition` from a contract, props, and `fn`. |
 | `ViewModelDefinition` | class | The instance factory returned by `createViewModel`. |
 | [`resolveFrom`](/reference/core/helpers) | function | Walk a `ScopeEntry[]` stack to resolve a ref by field name. |
-| [`validateEachProps`](/reference/core/helpers) | function | Assert that exactly one of `source`/`id`/`from` is provided. |
 
 ### Shared
 
@@ -81,7 +80,7 @@ See [Types](/reference/core/types) for descriptions of every exported type, incl
 
 - Contract: `ContractEntity`, `ContractStore`, `ContractRef`, `ContractInverse`, `BuildContract`, `StoreMeta`, `AnyRefOrInverse`.
 - Finalization: `Built<S, E, D, R>`, `InferBuilt<FC>`, `InferPkFields<FC>`.
-- Model: `ModelInstance`, `ModelInstanceId`, `ModelStore`, `ModelCreateInput`, `UpdateData`, `ApplyBind`, `CompoundKey`, `PkResult`, `ContractModelRefData`, `ContractModelRefOperations`, `ContractPkInput`, `InstanceMeta`.
+- Model: `ModelInstance`, `ModelInstanceId`, `ModelStore`, `ModelCreateInput`, `UpdateData`, `ApplyRefs`, `BindableFieldNames`, `RefsConfig`, `CompoundKey`, `PkResult`, `ContractModelRefData`, `ContractModelRefOperations`, `ContractPkInput`, `InstanceMeta`.
 - Refs: `RefManyApi`, `RefManyCreateData`, `RefManyElement`, `RefManyOperations`, `RefOneApi`, `RefOneOperation`.
 - Query: `Operator<T>`, `QueryContext`, `Reactive<T>`.
 - View-model: `ResolvedRef`, `ScopeEntry`, `ViewModelInstance`.

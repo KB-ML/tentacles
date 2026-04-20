@@ -7,7 +7,7 @@ import type {
   ContractStore,
 } from "../../contract";
 import { createFieldProxy } from "../field-proxy";
-import type { Model } from "../model";
+import { MODEL_INTERNAL, type Model } from "../model";
 import type { SidRegistry } from "../sid-registry";
 import type { ModelInstanceId } from "../types";
 
@@ -44,7 +44,7 @@ export function createUnits(
   // from event proxy → model event is registered upfront (zero-cost).
   const instanceToModelEvent = new Map<EventCallable<unknown>, EventCallable<unknown>>();
   for (const key of fields.eventFieldKeys) {
-    const modelEvent = owningModel.getModelEvent(key);
+    const modelEvent = owningModel[MODEL_INTERNAL].getModelEvent(key);
     if (modelEvent) {
       let _prepend: EventCallable<unknown> | null = null;
       const ensurePrepend = () => {
@@ -115,7 +115,7 @@ export function createUnits(
 
   // State fields → zero-cost proxies (no effector nodes).
   // Materialized into real virtual stores only on .map()/.graphite/combine access.
-  const sharedOnRegistry = owningModel.getSharedOnRegistry();
+  const sharedOnRegistry = owningModel[MODEL_INTERNAL].getSharedOnRegistry();
   for (const key of fields.stateFieldKeys) {
     units[key] = createFieldProxy(
       $dataMap,
@@ -160,8 +160,8 @@ export function createUnits(
   // Ref fields → ref API (many/one) with virtual $ids/$id store
   for (const key of fields.refFieldKeys) {
     const refEntity = contract[key] as ContractRef;
-    const targetModel = owningModel.resolveRefTarget(key, refEntity);
-    const { api, registeredSids: refSids } = targetModel.createRefApi(
+    const targetModel = owningModel[MODEL_INTERNAL].resolveRefTarget(key, refEntity);
+    const { api, registeredSids: refSids } = targetModel[MODEL_INTERNAL].createRefApi(
       refEntity.cardinality,
       key,
       makeSid,
@@ -178,7 +178,7 @@ export function createUnits(
 
   // Inverse fields → read-only id stores (users resolve to instances via the source model)
   for (const key of fields.inverseFieldKeys) {
-    const inverseIndex = owningModel.getInverseIndex(key);
+    const inverseIndex = owningModel[MODEL_INTERNAL].getInverseIndex(key);
     if (inverseIndex && instanceId != null) {
       units[key] = inverseIndex.$forTarget(instanceId);
     }
