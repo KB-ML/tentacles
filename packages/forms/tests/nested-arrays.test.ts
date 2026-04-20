@@ -39,14 +39,14 @@ describe("nested arrays — 4-level survey structure", () => {
     expect(form.sections.$count.getState()).toBe(1);
 
     const sectionIds = form.sections.$ids.getState();
-    const section = form.sections.instance(sectionIds[0]!).getState();
+    const section = form.sections.get(sectionIds[0]!);
     expect(section).not.toBeNull();
 
     section.questions.append({ prompt: "What color?" });
     expect(section.questions.$count.getState()).toBe(1);
 
     const questionIds = section.questions.$ids.getState();
-    const question = section.questions.instance(questionIds[0]!).getState();
+    const question = section.questions.get(questionIds[0]!);
     expect(question).not.toBeNull();
 
     question.choices.append({ label: "Red", value: "red" });
@@ -107,7 +107,7 @@ describe("sub-form inside array row", () => {
     form.people.append({ name: "Alice" });
 
     const ids = form.people.$ids.getState();
-    const person = form.people.instance(ids[0]!).getState();
+    const person = form.people.get(ids[0]!);
     expect(person).not.toBeNull();
     expect(person.address).toBeDefined();
     expect(person.address.kind).toBe("form");

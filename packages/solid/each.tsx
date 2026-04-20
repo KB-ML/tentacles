@@ -1,18 +1,52 @@
 import type { ScopeEntry } from "@kbml-tentacles/core";
 import { resolveFrom } from "@kbml-tentacles/core";
-import { is, type Store } from "effector";
+import { is, type Scope, type Store } from "effector";
 import { useUnit } from "effector-solid";
 import {
   type Accessor,
   type Context,
   createContext,
   createMemo,
+  type FlowComponent,
   For,
   type JSX,
   Show,
   useContext,
 } from "solid-js";
 import type { ModelInstanceId, ModelLike } from "./types";
+
+// ═══ Scope context ═══
+//
+// effector-solid's scope context is module-private (no `useProvidedScope`
+// export), so we mirror it here. Users who need SSR scope awareness with
+// <Each>/useModel should wrap their tree with `<ScopeProvider value={scope}>`
+// from this package (in addition to effector-solid's `<Provider>`).
+
+const SCOPE_CTX_KEY = Symbol.for("tentacles:solid:scopeContext");
+
+interface TentaclesSolidGlobal {
+  [SCOPE_CTX_KEY]?: Context<Scope | null>;
+}
+
+function getScopeContext(): Context<Scope | null> {
+  const g = globalThis as TentaclesSolidGlobal;
+  let ctx = g[SCOPE_CTX_KEY];
+  if (!ctx) {
+    ctx = createContext<Scope | null>(null);
+    g[SCOPE_CTX_KEY] = ctx;
+  }
+  return ctx;
+}
+
+export const ScopeProvider: FlowComponent<{ value: Scope }> = (props) => {
+  const Ctx = getScopeContext();
+  return <Ctx.Provider value={props.value}>{props.children}</Ctx.Provider>;
+};
+
+/** Read the scope from the nearest `<ScopeProvider>` ancestor, or null. */
+export function useProvidedScope(): Scope | null {
+  return useContext(getScopeContext());
+}
 
 // ═══ Context infrastructure ═══
 //
@@ -124,10 +158,17 @@ function EachItem<Instance>(props: {
   children?: JSX.Element | ((instance: Instance) => JSX.Element);
 }): JSX.Element {
   const ModelCtx = getModelContext(props.model);
-  const instance = useUnit(props.model.instance(props.id));
+  // Parent <EachSource> subscribes to $ids and unmounts rows when an id
+  // disappears — we intentionally do NOT subscribe to $idSet here.
+  const scope = useProvidedScope();
+  const instance = createMemo(() => {
+    return scope
+      ? ((props.model.getSync(props.id, scope) as Instance | undefined) ?? null)
+      : ((props.model.get(props.id) as Instance) ?? null);
+  });
 
   const stack = createMemo<readonly ScopeEntry[]>(() => {
-    const inst = instance() as Instance | null;
+    const inst = instance();
     return inst
       ? [...props.parentStack(), { model: props.model, instance: inst as Record<string, unknown> }]
       : props.parentStack();
@@ -157,10 +198,17 @@ function EachStaticId<Instance>(props: {
 }): JSX.Element {
   const ModelCtx = getModelContext(props.model);
   const parentStack = useContext(ScopeStackContext);
-  const instance = useUnit(props.model.instance(props.id));
+  const present = useUnit(props.model.has(props.id));
+  const scope = useProvidedScope();
+  const instance = createMemo(() => {
+    if (!present()) return null;
+    return scope
+      ? ((props.model.getSync(props.id, scope) as Instance | undefined) ?? null)
+      : ((props.model.get(props.id) as Instance) ?? null);
+  });
 
   const stack = createMemo<readonly ScopeEntry[]>(() => {
-    const inst = instance() as Instance | null;
+    const inst = instance();
     return inst
       ? [...parentStack(), { model: props.model, instance: inst as Record<string, unknown> }]
       : parentStack();

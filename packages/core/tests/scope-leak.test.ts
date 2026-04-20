@@ -254,9 +254,9 @@ describe("SCOPE LEAK: refs in scoped instances", () => {
     const model = createModel({
       contract,
       fn: ({ $title, items, current }) => ({ $title, items, current }),
-    });
-    model.bind({ items: () => targetModel, current: () => targetModel });
-
+    refs: { items: () => targetModel, current: () => targetModel },
+  });
+   
     for (let i = 0; i < 20; i++) {
       const scope = fork();
       const inst = await model.create({ id: "warmup", title: "t" }, { scope });

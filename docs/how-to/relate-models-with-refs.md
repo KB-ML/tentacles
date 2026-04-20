@@ -4,15 +4,15 @@ Relationships between models are declared with `.ref(name, cardinality, options?
 
 | Declaration | Cardinality | Per-instance API |
 |---|---|---|
-| `.ref(name, "one")` | Zero or one target | `{ $id, $resolved, set, clear }` |
-| `.ref(name, "many")` | Zero or more targets | `{ $ids, $resolved, add, remove }` |
-| `.inverse(name, refField)` | Reactive reverse lookup | `Store<Instance[]>` (or single instance) |
+| `.ref(name, "one")` | Zero or one target | `{ $id, set, clear }` |
+| `.ref(name, "many")` | Zero or more targets | `{ $ids, add, remove }` |
+| `.inverse(name, refField)` | Reactive reverse lookup | `Store<ModelInstanceId[]>` |
 
-Refs are resolved at model bind time — the referenced model does not need to exist yet when the contract is declared. Call `.bind({ refName: () => TargetModel })` on the source model to wire the relationship.
+Refs are resolved at model construction time — the referenced model does not need to exist yet when the contract is declared. Pass `refs: { refName: () => TargetModel }` to `createModel` to wire the relationship. Because each target is a lazy thunk, bidirectional and circular models can forward-reference one another.
 
 ## One-to-one
 
-Use `.ref(name, "one", options?)` for a zero-or-one relationship. The per-instance API exposes `$id`, `$resolved`, `set`, and `clear`:
+Use `.ref(name, "one", options?)` for a zero-or-one relationship. The per-instance API exposes `$id`, `set`, and `clear`:
 
 ```ts
 import { createContract, createModel } from "@kbml-tentacles/core"
@@ -29,7 +29,10 @@ const userContract = createContract()
   .pk("id")
 
 const avatarModel = createModel({ contract: avatarContract })
-const userModel   = createModel({ contract: userContract }).bind({ avatar: () => avatarModel })
+const userModel   = createModel({
+  contract: userContract,
+  refs: { avatar: () => avatarModel },
+})
 ```
 
 Each `userModel` instance gets an `avatar` field that is a `RefOneApi`:
@@ -38,9 +41,13 @@ Each `userModel` instance gets an `avatar` field that is a `RefOneApi`:
 const user = userModel.create({ id: 1, name: "Alice" })
 
 user.avatar.$id         // Store<ID | null> — current target id
-user.avatar.$resolved   // Store<Instance | null> — the resolved instance, or null
 user.avatar.set(42)     // link to avatar with id=42
 user.avatar.clear()     // unlink
+
+// Resolve to the full target instance when you need it:
+const $avatar = user.avatar.$id.map((id) =>
+  id != null ? (avatarModel.get(id) ?? null) : null,
+)
 ```
 
 `set` accepts a target id. To also create the target in one step, pass the ref data to `Model.create`:
@@ -53,11 +60,11 @@ userModel.create({
 })
 ```
 
-`$resolved` stays `null` until the target id resolves to an actual instance. If the target is deleted, `$resolved` falls to `null` on the next scope update.
+When the target is deleted, the ref's `$id` is nullified automatically (unless `onDelete: "cascade"` or `"restrict"` is set), so any manual `model.get($id)` resolution falls back to `null` on the next update.
 
 ## One-to-many
 
-Use `.ref(name, "many")` for zero-or-more targets. The per-instance API exposes `$ids`, `$resolved`, `add`, and `remove`:
+Use `.ref(name, "many")` for zero-or-more targets. The per-instance API exposes `$ids`, `add`, and `remove`:
 
 ```ts
 const postContract = createContract()
@@ -72,15 +79,24 @@ const userContract = createContract()
   .pk("id")
 
 const postModel = createModel({ contract: postContract })
-const userModel = createModel({ contract: userContract }).bind({ posts: () => postModel })
+const userModel = createModel({
+  contract: userContract,
+  refs: { posts: () => postModel },
+})
 
 const user = userModel.create({ id: 1, name: "Alice" })
 
 user.posts.$ids        // Store<ID[]>
-user.posts.$resolved   // Store<Instance[]> — reactive instances
 user.posts.add("p1")   // link to post "p1"
 user.posts.add("p2")
 user.posts.remove("p1")
+
+// Resolve to full target instances when you need them:
+const $posts = user.posts.$ids.map((ids) =>
+  ids
+    .map((id) => postModel.get(id))
+    .filter((p): p is NonNullable<typeof p> => p != null),
+)
 ```
 
 `add` and `remove` both accept a single id. Deduplication is automatic — calling `add("p1")` twice does not add it twice.
@@ -148,11 +164,22 @@ const userContract = createContract()
   .pk("id")
 
 const postModel = createModel({ contract: postContract })
-const userModel = createModel({ contract: userContract })
-  .bind({ posts: () => postModel })
+const userModel = createModel({
+  contract: userContract,
+  refs: { posts: () => postModel },
+})
 ```
 
-On a `userModel` instance, `user.$posts` is a `Store<Instance[]>` reflecting every post whose `author` ref currently points to this user. It updates reactively — setting a `post.author.set(...)` triggers a re-read.
+On a `userModel` instance, `user.$posts` is a `Store<ModelInstanceId[]>` reflecting every post-id whose `author` ref currently points to this user. It updates reactively — setting `post.author.set(...)` triggers a re-read. Resolve ids through the target model when you need the instance:
+
+```ts
+user.$posts.watch((ids) => {
+  for (const id of ids) {
+    const post = postModel.get(id);
+    if (post) console.log(post.$title.getState());
+  }
+});
+```
 
 Inverse refs are read-only. To change the relationship, modify the ref on the owning side (`post.author.set(userId)`). The inverse updates automatically.
 
@@ -256,13 +283,18 @@ const enrolmentContract = createContract()
   .pk("studentId", "courseId")
 ```
 
-Bind everything:
+Wire the junction model's refs to both endpoints:
 
 ```ts
 const studentModel   = createModel({ contract: studentContract })
 const courseModel    = createModel({ contract: courseContract })
-const enrolmentModel = createModel({ contract: enrolmentContract })
-  .bind({ student: () => studentModel, course: () => courseModel })
+const enrolmentModel = createModel({
+  contract: enrolmentContract,
+  refs: {
+    student: () => studentModel,
+    course: () => courseModel,
+  },
+})
 ```
 
 Add inverse refs on the endpoints to query in either direction:
@@ -287,7 +319,7 @@ This pattern scales — the junction model is a first-class entity and can hold 
 
 ## Self-reference
 
-A ref whose target is the same model is declared by binding the ref to the model itself:
+A ref whose target is the same model doesn't need an explicit `refs` entry — the runtime falls back to the model itself when no thunk is registered:
 
 ```ts
 const categoryContract = createContract()
@@ -298,10 +330,9 @@ const categoryContract = createContract()
   .pk("id")
 
 const categoryModel = createModel({ contract: categoryContract })
-categoryModel.bind({ parent: () => categoryModel, children: () => categoryModel })
 ```
 
-Now each category can point to its parent and list its children. Because `.bind` accepts thunks (`() => categoryModel`), the self-reference does not create a bootstrap problem.
+Now each category can point to its parent and list its children. No bootstrap problem: the self-reference is resolved the first time a ref API method is used.
 
 Inverse refs also work on self-referenced models:
 

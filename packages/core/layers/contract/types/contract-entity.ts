@@ -33,8 +33,12 @@ export interface ContractRef<
   fk: Fk;
 }
 
-export interface ContractInverse extends ContractEntity<ContractFieldKind.Inverse, never> {
+export interface ContractInverse<SourceModel extends Model<any, any, any, any> | unknown = unknown>
+  extends ContractEntity<ContractFieldKind.Inverse, never> {
   refField: string;
+  /** Phantom type carrier — populated by `ApplyRefs` from the `refs` config on `createModel`.
+   *  Runtime value is always undefined. */
+  _sourceModel?: SourceModel;
 }
 
 export interface ContractComputed<ValueType>

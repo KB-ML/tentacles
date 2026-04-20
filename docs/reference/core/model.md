@@ -1,6 +1,6 @@
 # Model
 
-`Model` is the runtime object returned by `createModel`. It owns the single `$dataMap` that backs every instance, exposes reactive stores (`$ids`, `$count`, `$instances`), wraps CRUD as effects with scope-aware variants, and produces `CollectionQuery` objects on demand. This page is a complete reference for every member on the public surface.
+`Model` is the runtime object returned by `createModel`. It owns the single `$dataMap` that backs every instance, exposes reactive membership stores (`$ids`, `$idSet`, `$count`, `$pkeys`), provides sync instance access (`get(id)`, `instances()`), wraps CRUD as effects with scope-aware variants, and produces `CollectionQuery` objects on demand. This page is a complete reference for every member on the public surface.
 
 ## Built-in stores
 
@@ -30,13 +30,13 @@ Model.$count: Store<number>
 
 Length of `$ids`. Derived; cheap to subscribe to.
 
-### `Model.$instances`
+### `Model.instances()`
 
 ```ts
-Model.$instances: Store<Instance[]>
+Model.instances(): Instance[]
 ```
 
-Insertion-ordered list of full instance objects. **Lazy**: the store is not created until first access. Prefer `$ids` + `Model.instance(id)` for large collections so you only subscribe to the records you render.
+Synchronous snapshot of all live Instance proxies in global scope, in insertion order. For large collections or reactive contexts prefer `$ids` + `Model.get(id)` so you only touch the records you render. For scoped reads, use `scope.getState(Model.$ids)` followed by `Model.get(id)`.
 
 ## Built-in effects
 
@@ -200,27 +200,26 @@ getByKeySync(...parts: (string | number)[], scope: Scope): Instance | undefined
 
 Compound-PK variant. Accepts the key parts in contract order. The final argument may be a `Scope` — detected by the presence of a `getState` method.
 
-### `Model.instance`
+### `Model.get`
 
 ```ts
-instance(id: ID): Store<Instance | null>
-instance(...compoundKey: (string | number)[]): Store<Instance | null>
-instance($id: Store<ID>): Store<Instance | null>
+get(id: ID): Instance | null
+get(...compoundKey: (string | number)[]): Instance | null
 ```
 
-Reactive lookup. Returns a store that emits `null` when the id is absent and the full instance when present. Memoised: the same id returns the same `Store` across calls. The `Store<ID>` overload lets the id itself be reactive.
+Synchronous lookup. Returns the stable Instance proxy or `null` when the id is absent. An O(1) global-cache hit; falls back to lazy proxy reconstruction when `$dataMap` has the data but the cache is empty (typical after `fork({ values })` hydration). The reconstructed proxy is scope-independent — its `$field` stores stay scope-aware because they read from `$dataMap`.
+
+For a reactive "does this id exist?" subscription use `Model.$idSet`:
 
 ```ts
-const $selected = todoModel.instance($selectedId)
+const $selected = combine(
+  model.$idSet,
+  $selectedId,
+  (idSet, id) => (id != null && idSet.has(id) ? model.get(id) : null),
+)
 ```
 
-### `Model.byPartialKey`
-
-```ts
-byPartialKey(...prefix: (string | number)[]): Store<Instance | null>
-```
-
-For compound PKs. Matches the first prefix bytes — useful for "find the record with `tenant=1, user=42, session=*`" patterns. Returns the first matching instance or `null`.
+For scoped imperative reads use `Model.getSync(id, scope)` / `Model.getByKeySync(...parts, scope)`.
 
 ### `Model.query`
 
@@ -240,25 +239,23 @@ Model.name: string
 
 Read-only. Matches the `name` passed to `createModel` (or `"unnamed"`). Used inside SIDs.
 
-### `Model.bind`
+### Ref targets — the `refs` option
+
+Ref and inverse targets are wired at construction time through the `refs` option on `createModel`. Each value is a thunk so bidirectional and circular references can forward-declare each other safely:
 
 ```ts
-Model.bind<B>(config: B): Model<ApplyBind<Contract, B>, Generics, Ext, PkFields>
+const userModel = createModel({
+  contract: userContract,
+  refs: { posts: () => postModel, comments: () => commentModel },
+})
+
+const postModel = createModel({
+  contract: postContract,
+  refs: { author: () => userModel },
+})
 ```
 
-Late-binds circular ref targets and inverse sources. Call after both sides of a circular relationship are created:
-
-```ts
-const userModel = createModel({ contract: userContract })
-const postModel = createModel({ contract: postContract })
-
-userModel.bind({ posts: () => postModel, comments: () => Comment })
-postModel.bind({ author: () => userModel })
-```
-
-`bind` returns the same model instance with an improved type — the phantom ref target is replaced by the concrete model, so `user.posts.$resolved` infers `postModel[]` instead of the stub.
-
-Only refs declared without an inline thunk and inverses need binding. Refs declared with `.ref("posts", "many", { ref: () => postModel })` resolve through the thunk automatically.
+Self-refs don't require an entry — a ref that targets its own model falls back to `this` automatically. Missing/unbound targets raise a `TentaclesError` on first resolution with the exact field name to fix.
 
 ### `Model.getRefMeta`
 

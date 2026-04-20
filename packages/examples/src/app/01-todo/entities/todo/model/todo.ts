@@ -1,6 +1,6 @@
-import { createContract, createModel } from "@kbml-tentacles/core";
+import { createContract } from "@kbml-tentacles/core";
 
-const contract = createContract()
+export const todoContract = createContract()
   .store("id", (s) => s<number>())
   .store("title", (s) => s<string>())
   .store("priority", (s) => s<"low" | "medium" | "high">())
@@ -12,5 +12,3 @@ const contract = createContract()
   .store("done", (s) => s<boolean>().default(false))
   .ref("category", "one", { fk: "categoryId" })
   .pk("id");
-
-export const todoModel = createModel({ contract });

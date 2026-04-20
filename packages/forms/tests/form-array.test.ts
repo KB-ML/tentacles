@@ -50,7 +50,7 @@ describe("form arrays", () => {
     const ids = form.items.$ids.getState();
     expect(ids).toHaveLength(1);
 
-    const instance = form.items.instance(ids[0]!).getState();
+    const instance = form.items.get(ids[0]!);
     expect(instance).not.toBeNull();
     expect(instance.$name.getState()).toBe("Widget");
     expect(instance.$qty.getState()).toBe(5);
@@ -151,18 +151,18 @@ describe("form arrays", () => {
     expect(form.items.$isValid.getState()).toBe(true);
   });
 
-  it("model APIs are accessible: $ids, $count, $instances, instance()", () => {
+  it("model APIs are accessible: $ids, $count, instances(), get()", () => {
     const { form } = setupArray();
 
     form.items.append({ name: "Test" });
 
     expect(form.items.$ids).toBeDefined();
     expect(form.items.$count).toBeDefined();
-    expect(form.items.$instances).toBeDefined();
-    expect(typeof form.items.instance).toBe("function");
+    expect(form.items.instances()).toBeDefined();
+    expect(typeof form.items.get).toBe("function");
 
     const ids = form.items.$ids.getState();
-    const inst = form.items.instance(ids[0]!).getState();
+    const inst = form.items.get(ids[0]!);
     expect(inst).not.toBeNull();
   });
 

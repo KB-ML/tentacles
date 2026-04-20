@@ -28,8 +28,8 @@ describe("Reactive Effects API", () => {
       });
 
       trigger({ id: "t1", title: "Test", done: false });
-      expect(model.instance("t1").getState()).not.toBeNull();
-      expect(model.instance("t1").getState()!.$title.getState()).toBe("Test");
+      expect(model.get("t1")).not.toBeNull();
+      expect(model.get("t1")!.$title.getState()).toBe("Test");
 
       model.clear();
     });
@@ -72,8 +72,8 @@ describe("Reactive Effects API", () => {
         { id: "t2", title: "Second", done: true },
       ]);
 
-      expect(model.instance("t1").getState()!.$title.getState()).toBe("First");
-      expect(model.instance("t2").getState()!.$done.getState()).toBe(true);
+      expect(model.get("t1")!.$title.getState()).toBe("First");
+      expect(model.get("t2")!.$done.getState()).toBe(true);
 
       model.clear();
     });
@@ -90,10 +90,10 @@ describe("Reactive Effects API", () => {
       });
 
       model.create({ id: "t1", title: "Test", done: false });
-      expect(model.instance("t1").getState()).not.toBeNull();
+      expect(model.get("t1")).not.toBeNull();
 
       trigger("t1");
-      expect(model.instance("t1").getState()).toBeNull();
+      expect(model.get("t1")).toBeNull();
 
       model.clear();
     });
@@ -150,8 +150,8 @@ describe("Reactive Effects API", () => {
 
       model.updateFx({ id: "t1", data: { title: "Updated", done: true } });
 
-      expect(model.instance("t1").getState()!.$title.getState()).toBe("Updated");
-      expect(model.instance("t1").getState()!.$done.getState()).toBe(true);
+      expect(model.get("t1")!.$title.getState()).toBe("Updated");
+      expect(model.get("t1")!.$done.getState()).toBe(true);
 
       model.clear();
     });
@@ -163,8 +163,8 @@ describe("Reactive Effects API", () => {
 
       model.updateFx({ id: "t1", data: { title: "Updated" } });
 
-      expect(model.instance("t1").getState()!.$title.getState()).toBe("Updated");
-      expect(model.instance("t1").getState()!.$done.getState()).toBe(false);
+      expect(model.get("t1")!.$title.getState()).toBe("Updated");
+      expect(model.get("t1")!.$done.getState()).toBe(false);
 
       model.clear();
     });
@@ -243,8 +243,8 @@ describe("Reactive Effects API", () => {
       model.create({ id: "t2", title: "Second", done: false });
       updates.length = 0;
 
-      model.instance("t1").getState()!.$title.set("Changed 1");
-      model.instance("t2").getState()!.$title.set("Changed 2");
+      model.get("t1")!.$title.set("Changed 1");
+      model.get("t2")!.$title.set("Changed 2");
 
       expect(updates).toEqual([
         { id: "t1", field: "title" },
@@ -277,12 +277,12 @@ describe("Reactive Effects API", () => {
     it("$instances reflects all current instances", () => {
       const model = createTodoModel();
 
-      expect(model.$instances.getState()).toEqual([]);
+      expect(model.instances()).toEqual([]);
 
       model.create({ id: "t1", title: "First", done: false });
       model.create({ id: "t2", title: "Second", done: true });
 
-      const instances = model.$instances.getState();
+      const instances = model.instances();
       expect(instances).toHaveLength(2);
       expect(instances[0]!.__id).toBe("t1");
       expect(instances[1]!.__id).toBe("t2");
@@ -309,7 +309,7 @@ describe("Reactive Effects API", () => {
       model.create({ id: "t1", title: "Test", done: false });
       model.delete("t1");
 
-      expect(model.instance("t1").getState()).toBeNull();
+      expect(model.get("t1")).toBeNull();
     });
 
     it("imperative clear() still works", () => {
@@ -362,7 +362,7 @@ describe("Reactive Effects API", () => {
 
       await allSettled(model.deleteFx, { scope, params: "t1" });
 
-      expect(model.instance("t1").getState()).toBeNull();
+      expect(model.get("t1")).toBeNull();
 
       model.clear();
     });
@@ -412,7 +412,7 @@ describe("Reactive Effects API", () => {
       model.create({ id: "t1", title: "Hello", done: false });
       changes.length = 0;
 
-      model.instance("t1").getState()!.$done.set(true);
+      model.get("t1")!.$done.set(true);
 
       expect(changes).toEqual(["t1.done=true"]);
 

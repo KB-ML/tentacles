@@ -172,8 +172,7 @@ describe("STRESS: $idSet lookup", () => {
     const start = performance.now();
     for (let i = 0; i < 200; i++) {
       const id = insts[(i * 7) % 1_000]!.__id;
-      const $inst = model.instance(id);
-      expect($inst.getState()).not.toBeNull();
+      expect(model.get(id)).not.toBeNull();
     }
     const ms = performance.now() - start;
     console.log(`[200 lookups on 1K] ${ms.toFixed(0)}ms`);

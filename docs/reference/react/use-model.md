@@ -106,11 +106,18 @@ const selected = useModel(todoModel, $selectedId);
 
 ```ts
 interface ModelLike<Instance> {
-  name: string;
-  instance: (idOrKey: ModelInstanceId | ModelInstanceId[] | Store<ModelInstanceId | null>)
-    => Store<Instance | null>;
+  readonly name: string;
+  readonly $ids: Store<ModelInstanceId[]>;
+  readonly $idSet: Store<Set<ModelInstanceId>>;
+  get(id: ModelInstanceId): Instance | null;
+  get(...parts: [string | number, string | number, ...(string | number)[]]): Instance | null;
+  getSync(id: ModelInstanceId): Instance | undefined;
+  getByKeySync(...parts: [string | number, string | number, ...(string | number)[]]): Instance | undefined;
+  getRefMeta(field: string): { cardinality: "one" | "many"; target: unknown } | undefined;
 }
 ```
+
+Reactive membership flows through `$idSet` (O(1)); instance access is synchronous via `get`. There is no `Store<Instance>` wrapper — `useModel` internally pairs `useUnit($idSet)` with `model.get(id)`.
 
 Any object satisfying this shape is accepted — both `Model<C>` from core and the `modelLike` produced by form arrays work.
 

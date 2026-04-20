@@ -8,6 +8,7 @@ import type {
   ContractRef,
   ContractStore,
 } from "../../contract";
+import type { ModelInstanceId } from "./model-intsance-id";
 import type { RefManyApi, RefOneApi } from "./ref-api";
 
 export type ModelStore<T> = StoreWritable<T> & { set: EventCallable<T> };
@@ -19,12 +20,12 @@ export type ContractEntityToModel<
   ? ModelStore<Value>
   : Entity extends ContractEvent<infer Value>
     ? EventCallable<Value>
-    : Entity extends ContractRef<infer Cardinality>
+    : Entity extends ContractRef<infer Cardinality, infer _TargetModel>
       ? Cardinality extends "one"
         ? RefOneApi
         : RefManyApi
       : Entity extends ContractInverse
-        ? Store<any[]>
+        ? Store<ModelInstanceId[]>
         : Entity extends ContractComputed<infer Value>
           ? Store<Value>
           : never;

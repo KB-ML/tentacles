@@ -10,6 +10,7 @@ function createModel<
   R,
 >(config: {
   contract: FC
+  refs?: RefsConfig<InferBuilt<FC>>
   fn?: (model: ContractModel<InferBuilt<FC>, {}>) => R
   name?: string
 }): Model<
@@ -27,6 +28,7 @@ Only `contract` is required. The contract **must** come from a chain closed with
 | Key | Type | Default | Purpose |
 |---|---|---|---|
 | `contract` | `FinalizedContractImpl` | — | Finalized model contract from `.pk()`. Required. |
+| `refs` | `{ [field]: () => TargetModel }` | `undefined` | Resolves ref/inverse target models via lazy thunks. Required when the contract declares ref or inverse fields that point to other models. |
 | `fn` | `(model) => R` | `undefined` | Runs once per model. Wires reducers, returns extensions. |
 | `name` | `string` | `"unnamed"` | Label folded into SIDs and debug output. |
 
@@ -115,19 +117,23 @@ createModel({ contract, name: "todo" })   // SIDs use "todo"
 
 The resulting `Model` type carries all four generics so downstream consumers (`Model.create`, `Model.instance`, `Model.query`) get full inference on field names, payload types, and PK shape without manual type arguments.
 
-## Ref binding
+## Refs
 
-Contracts with circular refs (`.ref("posts", "many", { ref: () => postModel })`) compile against the stub `postModel` declaration. At runtime the target is looked up through the inline thunk. For refs declared without a thunk, call `.bind(...)` on the returned model:
+When a contract declares `ref` or `inverse` fields that point to other models, pass the target models through the `refs` option. Each value is a thunk — invoked lazily on first resolution — which lets bidirectional and circular relationships forward-reference each other without ordering gymnastics.
 
 ```ts
-const userModel = createModel({ contract: userContract })
-const postModel = createModel({ contract: postContract })
+const userModel = createModel({
+  contract: userContract,
+  refs: { posts: () => postModel },
+})
 
-userModel.bind({ posts: () => postModel })
-postModel.bind({ author: () => userModel })
+const postModel = createModel({
+  contract: postContract,
+  refs: { author: () => userModel },
+})
 ```
 
-See [`Model.bind`](./model.md#bind) for details.
+Self-refs (`.ref("parent", "one")` on a model that targets itself) don't require an entry — the runtime falls back to `this`. Missing or unbound targets throw a clear `TentaclesError` at first resolution.
 
 ## Common patterns
 

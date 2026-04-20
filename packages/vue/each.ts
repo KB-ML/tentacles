@@ -1,11 +1,12 @@
 import type { ScopeEntry } from "@kbml-tentacles/core";
 import { resolveFrom } from "@kbml-tentacles/core";
-import { is, type Store } from "effector";
+import { is, type Scope, type Store } from "effector";
 import { useUnit } from "effector-vue/composition";
 import {
   type Component,
   computed,
   defineComponent,
+  getCurrentInstance,
   h,
   type InjectionKey,
   inject,
@@ -15,9 +16,20 @@ import {
   ref,
   toRaw,
   type VNode,
-  watch,
 } from "vue";
 import type { ModelInstanceId, ModelLike } from "./types";
+
+/**
+ * Mirrors effector-vue/composition's internal scope resolution so we can pass
+ * the current scope to `model.getSync`. See `packages/vue/use-model.ts`.
+ */
+function useProvidedScope(): Scope | null {
+  const instance = getCurrentInstance();
+  const scopeName = instance?.appContext.config.globalProperties.scopeName as string | undefined;
+  if (!scopeName) return null;
+  const scope = inject<Scope | null>(scopeName, null);
+  return scope ?? null;
+}
 
 // ═══ Context infrastructure ═══
 //
@@ -149,8 +161,15 @@ const EachItem = defineComponent({
     // Without it, Vue wraps effector's internal graphite nodes in a readonly proxy,
     // causing "[Vue warn] Set operation on key failed: target is readonly".
     const model = toRaw(props.model) as ModelLike;
-    const $instance = model.instance(props.id as ModelInstanceId);
-    const instance = useUnit($instance);
+    // Parent <EachSource> subscribes to $ids and removes rows when the id
+    // disappears. We intentionally do NOT subscribe to $idSet here —
+    // $idSet emits a fresh Set reference on every upstream $ids emission,
+    // which would re-render every row on any field change.
+    const scope = useProvidedScope();
+    const id = props.id as ModelInstanceId;
+    const instance = computed(() => {
+      return scope ? (model.getSync(id, scope) ?? null) : (model.get(id) ?? null);
+    });
 
     // Provide context when instance exists
     const parentStack = props.parentStack as readonly ScopeEntry[];
@@ -190,7 +209,12 @@ function setupEachStaticId(
   slots: Record<string, Function | undefined>,
 ) {
   const parentStack = useScopeStack();
-  const instance = useUnit(model.instance(id));
+  const presentRef = useUnit(markRaw(model.has(id)));
+  const scope = useProvidedScope();
+  const instance = computed(() => {
+    if (!presentRef.value) return null;
+    return scope ? (model.getSync(id, scope) ?? null) : (model.get(id) ?? null);
+  });
   const modelKey = getModelContext(model);
 
   provide(
@@ -229,11 +253,13 @@ function setupEachReactiveId(
 ) {
   const resolvedId = useUnit($id);
   const parentStack = useScopeStack();
+  const scope = useProvidedScope();
 
   // Computed instance that updates when resolvedId changes
   const $inst = computed(() => {
     const id = resolvedId.value as ModelInstanceId | null;
-    return id != null ? (model.getSync(id) ?? null) : null;
+    if (id == null) return null;
+    return (scope ? model.getSync(id, scope) : model.getSync(id)) ?? null;
   });
 
   const modelKey = getModelContext(model);

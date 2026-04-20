@@ -47,7 +47,7 @@ byRole.$groups.getState()
 
 Updating an instance's group-by field moves it between buckets; mutations on non-group-by fields re-emit the affected bucket with a fresh snapshot.
 
-For reactive per-row access inside a bucket, either iterate row PKs and call `Model.instance(pk)`, or create a sub-query with `group(key)` (below).
+For reactive per-row access inside a bucket, either iterate row PKs and call `Model.get(pk)`, or create a sub-query with `group(key)` (below).
 
 ### `.$keys`
 
@@ -192,7 +192,7 @@ Two complementary access patterns:
 |---|---|
 | Render bucket as plain data (common) | `$groups` — Map of row arrays |
 | Render one bucket reactively (e.g. virtualised) | `group(key)` — sub-query with `$list`, `$ids`, `.field`, etc. |
-| Per-row reactive access (stores, events) | `Model.instance(row.pk)` from `$groups` rows |
+| Per-row reactive access (stores, events) | `Model.get(row.pk)` from `$groups` rows |
 
 Because `$groups` emits plain objects, `groups.get(role)![0].title` reads a snapshot — no risk of stale store captures across renders.
 

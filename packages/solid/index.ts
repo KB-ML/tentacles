@@ -1,5 +1,5 @@
 export type { EachProps } from "./each";
-export { Each, ScopeStackContext } from "./each";
+export { Each, ScopeProvider, ScopeStackContext, useProvidedScope } from "./each";
 export type { ModelLike } from "./types";
 export { useModel } from "./use-model";
 export type { ViewProps } from "./view";

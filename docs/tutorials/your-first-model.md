@@ -195,7 +195,7 @@ console.log(epics.$list.getState().map((row) => row.title))
 // ["The Hobbit"]
 ```
 
-`$list` emits **plain rows** — field snapshots, not Instance objects. When you need reactive per-row access (stores, events, refs), iterate `$ids` and call `bookModel.instance(id)`.
+`$list` emits **plain rows** — field snapshots, not Instance objects. When you need reactive per-row access (stores, events, refs), iterate `$ids` and call `bookModel.get(id)`.
 
 A few things to try:
 
@@ -244,7 +244,7 @@ tentacles-books/
 A single file gave you:
 
 - Type-safe CRUD with **zero boilerplate** — no `createStore`, no `createEvent`, no manual `$list`.
-- **Built-in stores**: `$ids`, `$count`, `$instances`.
+- **Built-in stores**: `$ids`, `$idSet`, `$count`. Sync access: `get(id)`, `instances()`.
 - **Events** wired with one `on` call, shared across all instances.
 - **Derived fields** computed reactively from other stores.
 - **Queries** that update incrementally as data changes.

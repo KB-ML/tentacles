@@ -42,9 +42,10 @@ describe("FK mapping: one ref", () => {
     .store("schedule_id", (s) => s<string>().default(""))
     .ref("schedule", "one", { fk: "schedule_id" })
     .pk("id");
-  const userModel = createModel({ contract: userContract });
-  userModel.bind({ schedule: () => scheduleModel });
-
+  const userModel = createModel({ contract: userContract,
+    refs: { schedule: () => scheduleModel },
+  });
+ 
   it("links via FK field name", () => {
     scheduleModel.create({ id: "s1", time: "12-15" });
 
@@ -91,9 +92,10 @@ describe("FK mapping: one ref", () => {
       .store("categoryId", (s) => s<number>())
       .ref("category", "one", { fk: "categoryId" })
       .pk("categoryId", "id");
-    const todoModel = createModel({ contract: todoContract });
-    todoModel.bind({ category: () => categoryModel });
-
+    const todoModel = createModel({ contract: todoContract,
+    refs: { category: () => categoryModel },
+  });
+   
     const todo = todoModel.create({
       id: 42,
       title: "buy milk",
@@ -118,9 +120,10 @@ describe("FK mapping: many ref", () => {
     .store("tag_ids", (s) => s<string>().default(""))
     .ref("tags", "many", { fk: "tag_ids" })
     .pk("id");
-  const postModel = createModel({ contract: postContract });
-  postModel.bind({ tags: () => tagModel });
-
+  const postModel = createModel({ contract: postContract,
+    refs: { tags: () => tagModel },
+  });
+ 
   it("links many via FK field name", () => {
     tagModel.create({ id: "t1", label: "ts" });
     tagModel.create({ id: "t2", label: "js" });
@@ -156,9 +159,10 @@ describe("Inverse create: link by ID", () => {
     .store("title", (s) => s<string>())
     .inverse("category", "todos")
     .pk("id");
-  const todoModel = createModel({ contract: todoContract });
-  todoModel.bind({ category: () => categoryModel });
-
+  const todoModel = createModel({ contract: todoContract,
+    refs: { category: () => categoryModel },
+  });
+ 
   it("links to existing source instance by ID", () => {
     const cat = categoryModel.create({ id: "cat-work", name: "Work" });
 
@@ -181,7 +185,7 @@ describe("Inverse create: link by ID", () => {
     todoModel.create({ id: "t4", title: "Standalone" });
 
     // No error, no link
-    expect(todoModel.instance("t4").getState()?.$title.getState()).toBe("Standalone");
+    expect(todoModel.get("t4")?.$title.getState()).toBe("Standalone");
   });
 
   it("throws when source instance doesn't exist", () => {
@@ -221,9 +225,10 @@ describe("Inverse create: inline create source", () => {
     .store("title", (s) => s<string>())
     .inverse("category", "todos")
     .pk("id");
-  const todoModel = createModel({ contract: todoContract });
-  todoModel.bind({ category: () => categoryModel });
-
+  const todoModel = createModel({ contract: todoContract,
+    refs: { category: () => categoryModel },
+  });
+ 
   it("creates source instance inline and links", () => {
     todoModel.create({
       id: "t1",
@@ -231,7 +236,7 @@ describe("Inverse create: inline create source", () => {
       category: { create: { id: "cat-new", name: "New Category" } },
     });
 
-    const cat = categoryModel.instance("cat-new").getState();
+    const cat = categoryModel.get("cat-new");
     expect(cat?.$name.getState()).toBe("New Category");
     expect(cat?.todos.$ids.getState()).toContain("t1");
   });
@@ -254,9 +259,10 @@ describe("Inverse create: one ref source", () => {
     .store("name", (s) => s<string>())
     .inverse("task", "assignedTo")
     .pk("id");
-  const workerModel = createModel({ contract: workerContract });
-  workerModel.bind({ task: () => taskModel });
-
+  const workerModel = createModel({ contract: workerContract,
+    refs: { task: () => taskModel },
+  });
+ 
   it("links via one ref source", () => {
     const task = taskModel.create({ id: "task-1", title: "Build" });
 
@@ -281,21 +287,23 @@ describe("onDelete after inverse-created link", () => {
       .store("id", (s) => s<string>())
       .ref("items", "many", { onDelete: "cascade" })
       .pk("id");
-    const boxModel = createModel({ contract: boxContract });
-    boxModel.bind({ items: () => itemModel });
-
+    const boxModel = createModel({ contract: boxContract,
+    refs: { items: () => itemModel },
+  });
+   
     const invContract = createContract()
       .store("id", (s) => s<string>())
       .store("name", (s) => s<string>())
       .inverse("box", "items")
       .pk("id");
-    const invModel = createModel({ contract: invContract });
-    invModel.bind({ box: () => boxModel });
-
+    const invModel = createModel({ contract: invContract,
+    refs: { box: () => boxModel },
+  });
+   
     boxModel.create({ id: "box1" });
     invModel.create({ id: "i1", name: "A", box: "box1" });
 
-    expect(boxModel.instance("box1").getState()?.items.$ids.getState()).toContain("i1");
+    expect(boxModel.get("box1")?.items.$ids.getState()).toContain("i1");
 
     // Deleting box should cascade-delete i1 from itemModel (the ref target)
     boxModel.delete("box1");
@@ -312,17 +320,19 @@ describe("onDelete after inverse-created link", () => {
       .store("id", (s) => s<string>())
       .ref("items", "many", { onDelete: "restrict" })
       .pk("id");
-    const boxModel = createModel({ contract: boxContract });
-    boxModel.bind({ items: () => itemModel });
-
+    const boxModel = createModel({ contract: boxContract,
+    refs: { items: () => itemModel },
+  });
+   
     const invContract = createContract()
       .store("id", (s) => s<string>())
       .store("name", (s) => s<string>())
       .inverse("box", "items")
       .pk("id");
-    const invModel = createModel({ contract: invContract });
-    invModel.bind({ box: () => boxModel });
-
+    const invModel = createModel({ contract: invContract,
+    refs: { box: () => boxModel },
+  });
+   
     boxModel.create({ id: "box1" });
     invModel.create({ id: "i1", name: "A", box: "box1" });
 
@@ -362,9 +372,10 @@ describe("Mixed: ref + FK + inverse in single create", () => {
     .ref("schedule", "one", { fk: "schedule_id" })
     .inverse("team", "members")
     .pk("id");
-  const userModel = createModel({ contract: userContract });
-  userModel.bind({ tags: () => tagModel, schedule: () => scheduleModel, team: () => teamModel });
-
+  const userModel = createModel({ contract: userContract,
+    refs: { tags: () => tagModel, schedule: () => scheduleModel, team: () => teamModel },
+  });
+ 
   it("combines ref, FK, and inverse in one create", () => {
     tagModel.create({ id: "tag-ts", label: "TypeScript" });
     scheduleModel.create({ id: "sched-1", time: "9-17" });
@@ -397,16 +408,17 @@ describe("SSR: FK mapping with scope", () => {
     .store("schedule_id", (s) => s<string>().default(""))
     .ref("schedule", "one", { fk: "schedule_id" })
     .pk("id");
-  const userModel = createModel({ contract: userContract });
-  userModel.bind({ schedule: () => scheduleModel });
-
+  const userModel = createModel({ contract: userContract,
+    refs: { schedule: () => scheduleModel },
+  });
+ 
   it("FK mapping works in scoped create", async () => {
     const scope = fork();
 
     await scheduleModel.create({ id: "s1", time: "12-15" }, { scope });
     await userModel.create({ id: "u1", name: "oleg", schedule_id: "s1" }, { scope });
 
-    const user = userModel.instance("u1").getState()!;
+    const user = userModel.get("u1")!;
     expect(scope.getState(user.schedule.$id)).toBe("s1");
   });
 });
@@ -424,16 +436,17 @@ describe("SSR: inverse linking with scope", () => {
     .store("title", (s) => s<string>())
     .inverse("category", "todos")
     .pk("id");
-  const todoModel = createModel({ contract: todoContract });
-  todoModel.bind({ category: () => categoryModel });
-
+  const todoModel = createModel({ contract: todoContract,
+    refs: { category: () => categoryModel },
+  });
+ 
   it("inverse linking works in scoped create", async () => {
     const scope = fork();
 
     await categoryModel.create({ id: "cat-1", name: "Work" }, { scope });
     await todoModel.create({ id: "t1", title: "Review", category: "cat-1" }, { scope });
 
-    const cat = categoryModel.instance("cat-1").getState()!;
+    const cat = categoryModel.get("cat-1")!;
     expect(scope.getState(cat.todos.$ids)).toContain("t1");
   });
 
@@ -447,7 +460,7 @@ describe("SSR: inverse linking with scope", () => {
     await todoModel.create({ id: "ts1", title: "Todo A", category: "cat-s" }, { scope: scope1 });
     await todoModel.create({ id: "ts2", title: "Todo B", category: "cat-s" }, { scope: scope2 });
 
-    const cat = categoryModel.instance("cat-s").getState()!;
+    const cat = categoryModel.get("cat-s")!;
     expect(scope1.getState(cat.todos.$ids)).toContain("ts1");
     expect(scope2.getState(cat.todos.$ids)).toContain("ts2");
   });
@@ -477,9 +490,10 @@ describe("MEMORY: FK create/delete cycle", () => {
       .store("schedule_id", (s) => s<string>().default(""))
       .ref("schedule", "one", { fk: "schedule_id" })
       .pk("id");
-    const userModel = createModel({ contract: userContract });
-    userModel.bind({ schedule: () => scheduleModel });
-
+    const userModel = createModel({ contract: userContract,
+    refs: { schedule: () => scheduleModel },
+  });
+   
     scheduleModel.create({ id: "fixed-sched", time: "9-17" });
 
     // Warmup
@@ -513,9 +527,10 @@ describe("MEMORY: inverse create/delete cycle", () => {
       .store("title", (s) => s<string>())
       .inverse("category", "todos")
       .pk("id");
-    const todoModel = createModel({ contract: todoContract });
-    todoModel.bind({ category: () => categoryModel });
-
+    const todoModel = createModel({ contract: todoContract,
+    refs: { category: () => categoryModel },
+  });
+   
     categoryModel.create({ id: "mem-cat", name: "Persistent" });
 
     // Warmup

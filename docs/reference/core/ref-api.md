@@ -7,14 +7,15 @@ Refs turn a field name on one model into a reactive link to another. `.ref("auth
 Produced by `.ref(name, "many")`. Every instance exposes one `RefManyApi` per many-ref field.
 
 ```ts
-interface RefManyApi<T> {
-  $ids:      Store<ID[]>
-  $resolved: Store<T[]>
+interface RefManyApi {
+  $ids:   Store<ID[]>
   add(idOrData: ID | CreateInput<T>): void
   remove(id: ID): void
   clear(): void
 }
 ```
+
+Resolve ids to full target instances yourself via `targetModel.get(id)` — one `.map()` per caller keeps the graph lean.
 
 ### `$ids`
 
@@ -29,19 +30,19 @@ user.tags.$ids       // Store<string[]>
 user.tags.$ids.getState() // ["1", "2"]
 ```
 
-### `$resolved`
+### Resolving ids
+
+There is no `$resolved` helper — callers resolve ids through `targetModel.get(id)` themselves:
 
 ```ts
-$resolved: Store<T[]>
+const $resolved = user.tags.$ids.map((ids) =>
+  ids
+    .map((id) => tagModel.get(id))
+    .filter((tag): tag is NonNullable<typeof tag> => tag != null),
+)
 ```
 
-Lazy-materialised store that maps each id to the full target instance via the target model's cache. Subscribing to `$resolved` reactively re-resolves on every structural change (ids added/removed) and on every target field mutation.
-
-```ts
-user.tags.$resolved // Store<TagInstance[]>
-```
-
-Access this only when you actually render the resolved objects — the resolver runs over the full id array on every update. For read-only "does this ref contain x?" checks, prefer `$ids`.
+Resolve only where you actually render the instances; for "does this ref contain x?" checks, stick with `$ids`.
 
 ### `add`
 
@@ -80,13 +81,14 @@ Remove all ids from this ref. Same no-delete semantics as `remove`.
 Produced by `.ref(name, "one")`. Every instance exposes one `RefOneApi` per one-ref field.
 
 ```ts
-interface RefOneApi<T> {
-  $id:       Store<ID | null>
-  $resolved: Store<T | null>
+interface RefOneApi {
+  $id:    Store<ID | null>
   set(idOrData: ID | CreateInput<T>): void
   clear(): void
 }
 ```
+
+Resolve `$id` to the full target via `targetModel.get(id)` when you need the instance.
 
 ### `$id`
 
@@ -100,17 +102,17 @@ Reactive id of the linked target, or `null` when unlinked. Backed by `$dataMap`.
 post.author.$id        // Store<string | null>
 ```
 
-### `$resolved`
+### Resolving the id
+
+No built-in `$resolved`. When you need the linked instance, derive it yourself:
 
 ```ts
-$resolved: Store<T | null>
+const $resolved = post.author.$id.map((id) =>
+  id != null ? (userModel.get(id) ?? null) : null,
+)
 ```
 
-Lazy-materialised. Resolves `$id` through the target model's cache. Emits `null` when the id is `null` or when the target has been deleted.
-
-```ts
-post.author.$resolved  // Store<UserInstance | null>
-```
+Emits `null` when `$id` is `null` or when the target has been deleted (nullify cascades clear `$id` automatically).
 
 ### `set`
 
@@ -193,12 +195,12 @@ The reverse of a ref is an inverse, declared on the **target** side:
 userContract.inverse("posts", "author")
 ```
 
-`user.$posts` is a `Store<PostInstance[]>` derived from the shared `InverseIndex` — no per-instance storage. Refs and inverses stay in sync automatically: `post.author.set(user.id)` adds `post` to `user.$posts`.
+`user.$posts` is a `Store<ModelInstanceId[]>` derived from the shared `InverseIndex` — no per-instance storage. Resolve ids to instances with `postModel.get(id)`. Refs and inverses stay in sync automatically: `post.author.set(user.id)` adds the post's id to `user.$posts`.
 
 Inverses are **read-only**. To link a post to a user, mutate the post's ref, not the user's inverse.
 
 ## See also
 
 - [`createContract` — refs](./create-contract.md#refs) — ref declaration syntax.
-- [`Model.bind`](./model.md#bind) — late-binding circular refs.
+- [`createModel` — `refs` option](./create-model.md) — wiring ref / inverse targets.
 - [`Model.delete`](./model.md#delete) — where cascade / nullify / restrict execute.

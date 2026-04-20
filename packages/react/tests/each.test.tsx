@@ -48,6 +48,7 @@ function makeCategoryTodoModels() {
   const catModel = createModel({
     contract: catContract,
     fn: ({ $id, $name, todos }) => ({ $id, $name, todos }),
+    refs: { todos: () => todoModel },
   });
 
   const todoContract = createContract()
@@ -59,11 +60,10 @@ function makeCategoryTodoModels() {
   const todoModel = createModel({
     contract: todoContract,
     fn: ({ $id, $title, $category }) => ({ $id, $title, $category }),
+    refs: { category: () => catModel },
   });
 
-  catModel.bind({ todos: () => todoModel });
-  todoModel.bind({ category: () => catModel });
-
+  
   return { catModel, todoModel };
 }
 
@@ -560,13 +560,15 @@ describe("multi-level nesting", () => {
       .store("label", (s) => s<string>())
       .pk("id");
 
-    const catModel = createModel({ contract: catContract });
-    const todoModel = createModel({ contract: todoContract });
+    const catModel = createModel({ contract: catContract,
+    refs: { todos: () => todoModel },
+  });
+    const todoModel = createModel({ contract: todoContract,
+    refs: { tags: () => tagModel },
+  });
     const tagModel = createModel({ contract: tagContract });
 
-    catModel.bind({ todos: () => todoModel });
-    todoModel.bind({ tags: () => tagModel });
-
+      
     catModel.create({
       id: "c1",
       name: "Work",

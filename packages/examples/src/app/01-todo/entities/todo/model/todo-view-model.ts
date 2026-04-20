@@ -1,7 +1,6 @@
 import { createViewContract, createViewModel, eq, includes, oneOf } from "@kbml-tentacles/core";
 import { combine, createEffect, sample } from "effector";
-import { categoryModel } from "./category";
-import { todoModel } from "./todo";
+import { categoryModel, todoModel } from "./index";
 import type { TodoPerPage, TodoPriority, TodoSortingDirection, TodoSortingField } from "./types";
 
 const contract = createViewContract()

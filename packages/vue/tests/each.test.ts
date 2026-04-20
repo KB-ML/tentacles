@@ -33,6 +33,7 @@ function makeCategoryTodoModels() {
   const catModel = createModel({
     contract: catContract,
     fn: ({ $id, $name, todos }) => ({ $id, $name, todos }),
+    refs: { todos: () => todoModel },
   });
 
   const todoContract = createContract()
@@ -44,11 +45,10 @@ function makeCategoryTodoModels() {
   const todoModel = createModel({
     contract: todoContract,
     fn: ({ $id, $title, $category }) => ({ $id, $title, $category }),
+    refs: { category: () => catModel },
   });
 
-  catModel.bind({ todos: () => todoModel });
-  todoModel.bind({ category: () => catModel });
-
+  
   return { catModel, todoModel };
 }
 

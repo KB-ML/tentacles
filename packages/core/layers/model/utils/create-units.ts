@@ -176,11 +176,11 @@ export function createUnits(
     registeredSids.push(...refSids);
   }
 
-  // Inverse fields → read-only resolved stores
+  // Inverse fields → read-only id stores (users resolve to instances via the source model)
   for (const key of fields.inverseFieldKeys) {
     const inverseIndex = owningModel.getInverseIndex(key);
     if (inverseIndex && instanceId != null) {
-      units[key] = inverseIndex.$resolvedForTarget(instanceId);
+      units[key] = inverseIndex.$forTarget(instanceId);
     }
   }
 

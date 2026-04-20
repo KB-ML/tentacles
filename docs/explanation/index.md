@@ -40,7 +40,7 @@ You can read these pages in any order, though some build on each other. The arch
 
 [Lightweight instances](/explanation/lightweight-instances) — Models without `fn`, refs, computed fields, `resetOn`, or indexes skip `withRegion` entirely. How Tentacles detects that, the spectrum from zero effector nodes to user-created extensions, and when you would want to leave the lightweight path on purpose.
 
-[Incremental queries](/explanation/incremental-queries) — The two update paths in the filter stage: full scan for structural changes, incremental sample for single-field mutations. The `$lastField` optimization in the sort stage, the plain-row projection of `$list`, and why `QueryField` derives directly from `$ids` and `$dataMap`.
+[Incremental queries](/explanation/incremental-queries) — The two update paths in the filter stage: full scan for structural changes, incremental sample for single-field mutations. The `$sortFieldBump` optimization in the sort stage, the plain-row projection of `$list`, and why `QueryField` derives directly from `$ids` and `$dataMap`.
 
 [Strategy pattern](/explanation/strategy-pattern) — Why the `CONTRACT_CHAIN_STRATEGY` symbol exists. How `pick`, `omit`, `partial`, `required`, and `merge` work across all chain types without `instanceof` checks, and why `Symbol.for` makes the strategy survive duplicate module copies.
 

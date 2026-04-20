@@ -99,15 +99,20 @@ return <Show when={selected()}>{(t) => <Editor todo={t()} />}</Show>;
 | 4 | `Accessor<Instance \| null>` |
 | 5 | `Accessor<Instance \| null>` |
 
-Overloads 3–5 wrap the underlying `Store<Instance | null>` via `useUnit` from `effector-solid`, yielding an accessor. Call it in JSX, inside `createEffect`, or inside any reactive context.
+Overloads 3–5 subscribe to `model.$idSet` (plus the reactive id store where applicable) via `useUnit` from `effector-solid` and resolve the proxy synchronously via `model.get(id)`. The result is an accessor you can call in JSX, inside `createEffect`, or any reactive context.
 
 ## `ModelLike<Instance>`
 
 ```ts
 interface ModelLike<Instance> {
-  name: string;
-  instance: (idOrKey: ModelInstanceId | ModelInstanceId[] | Store<ModelInstanceId | null>)
-    => Store<Instance | null>;
+  readonly name: string;
+  readonly $ids: Store<ModelInstanceId[]>;
+  readonly $idSet: Store<Set<ModelInstanceId>>;
+  get(id: ModelInstanceId): Instance | null;
+  get(...parts: [string | number, string | number, ...(string | number)[]]): Instance | null;
+  getSync(id: ModelInstanceId): Instance | undefined;
+  getByKeySync(...parts: [string | number, string | number, ...(string | number)[]]): Instance | undefined;
+  getRefMeta(field: string): { cardinality: "one" | "many"; target: unknown } | undefined;
 }
 ```
 

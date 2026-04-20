@@ -253,7 +253,7 @@ The rule of thumb is that `fn` should wire stores and events through effector pr
 
 Because of `detectSidRoot` and the plugin, every store Tentacles creates carries an SID.
 
-The shared `$dataMap`, the `$ids` registry, the `$idSet`, `$count`, the lazy `$instances`, the event-backed `updateFx`, the per-instance slice stores when they materialize — all of them have SIDs.
+The shared `$dataMap`, the `$ids` registry, the `$idSet`, `$count`, the lazy `instances()`, the event-backed `updateFx`, the per-instance slice stores when they materialize — all of them have SIDs.
 
 ### Complete coverage
 

@@ -308,7 +308,7 @@ describe("required: SSR", () => {
     model.clear();
 
     const clientScope = fork({ values });
-    const inst = clientScope.getState(model.instance("1"));
+    const inst = model.getSync("1", clientScope);
 
     expect(inst).not.toBeNull();
     expect(clientScope.getState(inst!.$name)).toBe("Bob");

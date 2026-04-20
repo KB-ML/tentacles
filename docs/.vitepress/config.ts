@@ -58,7 +58,7 @@ userModel.create({ name: "Bob" }) // age defaults to 0
 
 userModel.$count     // Store<number> → 2
 userModel.$ids       // Store<string[]>
-userModel.$instances // Store<Instance[]>`,
+userModel.instances() // Instance[]`,
   },
   queries: {
     lang: "typescript",

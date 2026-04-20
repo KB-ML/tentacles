@@ -118,7 +118,7 @@ Derived fields appear on instances with a `$` prefix exactly like stores. They a
 
 - All previously declared stores as `$<name>`
 - All previously declared derived fields as `$<name>`
-- Refs as their runtime API (`ref<"many">` → `{ $ids, $resolved, add, remove }`, `ref<"one">` → `{ $id, $resolved, set, clear }`)
+- Refs as their runtime API (`ref<"many">` → `{ $ids, add, remove }`, `ref<"one">` → `{ $id, set, clear }`)
 
 Order matters for derived chains — a derived field can only reference fields declared before it.
 
@@ -143,7 +143,7 @@ const membershipContract = createContract()
   .pk("userId", "tenantId")
 ```
 
-With a compound PK, each instance is uniquely identified by the tuple `[userId, tenantId]`. Use `Model.getByKeySync(userId, tenantId)` and `Model.byPartialKey(userId)` to look up instances.
+With a compound PK, each instance is uniquely identified by the tuple `[userId, tenantId]`. Use `Model.getByKeySync(userId, tenantId)` (or `Model.get(userId, tenantId)` on the global cache) to look up instances.
 
 `.pk()` returns a `FinalizedContractImpl<Stores, Events, Derived, Refs, PkFields>`. This object has no chain methods — it is a frozen schema ready for `createModel`. The finalized contract also captures:
 
@@ -173,7 +173,7 @@ const userContract = createContract()
 - `fk` lets you alias the ref under a specific foreign-key field name (handy for API-style inputs).
 - `.inverse(name, refField)` takes the local name first and the remote ref field name second.
 
-Relationships are resolved lazily — the referenced model does not have to exist when the contract is declared. Bind the target model on the generated `Model` using `.bind({ posts: () => PostModel })`. See [Relate models with refs](/how-to/relate-models-with-refs) for the full mechanics.
+Relationships are resolved lazily — the referenced model does not have to exist when the contract is declared. Wire the target on `createModel` via `refs: { posts: () => postModel }`. See [Relate models with refs](/how-to/relate-models-with-refs) for the full mechanics.
 
 ## Reuse via `.merge` or `pick` / `omit`
 

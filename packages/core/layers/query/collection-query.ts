@@ -511,41 +511,56 @@ export class CollectionQuery<
           return sorted;
         };
 
-        // $sorted triggers ONLY on $filtered change or sort-field mutation.
-        // Does NOT combine with $dataMap — avoids O(1) effector overhead per ANY $dataMap mutation.
-        // Reads $dataMap from source (for sort comparator values) but NOT as a trigger.
-        const $lastField = ctx.$fieldUpdated
-          ? createStore<string | null>(null).on(ctx.$fieldUpdated, (_, { field }) => field)
+        // Sort-field mutation counter: bumps ONLY when a sort field is mutated.
+        // Unlike `$lastField`, this emits a distinct value every time (via ++),
+        // so repeated mutations to the same sort field all trigger re-sort.
+        const $sortFieldBump = ctx.$fieldUpdated
+          ? createStore(0).on(ctx.$fieldUpdated, (n, { field }) =>
+              staticSortFields.has(field) ? n + 1 : n,
+            )
           : null;
 
-        // Clock: $filtered changes (add/remove), reactive sort operands change,
-        // OR sort-field mutation (via $lastField filtered to sort fields).
-        const clocks: (Store<unknown> | EventCallable<unknown>)[] = [
-          this.$filtered,
-          ...reactiveStores,
-        ];
-        if ($lastField) {
-          // Only trigger on sort-field mutations, not all field mutations.
-          const sortFieldChanged = sample({
-            clock: $lastField,
-            filter: (field: string | null) => field !== null && staticSortFields.has(field),
-          });
-          clocks.push(sortFieldChanged as unknown as EventCallable<unknown>);
-        }
-
         // Derive $sorted from $filtered + $dataMap, but only re-sort when
-        // $filtered changes (add/remove) or a sort-field mutates (via $lastField).
-        // Uses combine for SSR scope correctness (reads scoped $dataMap).
+        // $filtered changes (add/remove), sort operands change, or a sort-field
+        // was mutated ($sortFieldBump incremented). $dataMap is in the combine
+        // for SSR scope correctness but we memoize to skip re-sort (and avoid
+        // emitting a new array ref) when only non-sort fields changed.
         const sortTriggers: Store<unknown>[] = [this.$filtered, ...reactiveStores];
-        if ($lastField) sortTriggers.push($lastField as Store<unknown>);
+        if ($sortFieldBump) sortTriggers.push($sortFieldBump as Store<unknown>);
+
+        let prevFiltered: ModelInstanceId[] | null = null;
+        let prevOperands: unknown[] | null = null;
+        let prevBump: number | undefined;
+        let prevSorted: ModelInstanceId[] = [];
 
         this._$sorted = combine([...sortTriggers, ctx.$dataMap]).map((combined) => {
           const filtered = combined[0] as ModelInstanceId[];
           const dataMap = combined[combined.length - 1] as Record<string, Record<string, unknown>>;
-          const operandSlice = combined.slice(1, $lastField ? -2 : -1);
-          const reactiveValues = buildRV(rStores, operandSlice);
+          const operandEnd = $sortFieldBump ? combined.length - 2 : combined.length - 1;
+          const operandSlice = combined.slice(1, operandEnd);
+          const currentBump = $sortFieldBump
+            ? (combined[combined.length - 2] as number)
+            : undefined;
 
-          return doSort(filtered, dataMap, reactiveValues);
+          if (prevFiltered !== null) {
+            const filteredChanged = filtered !== prevFiltered;
+            const operandsChanged =
+              prevOperands !== null && operandSlice.some((v, i) => v !== prevOperands![i]);
+            const sortFieldMutated = currentBump !== prevBump;
+
+            if (!filteredChanged && !operandsChanged && !sortFieldMutated) {
+              prevFiltered = filtered;
+              prevOperands = operandSlice;
+              prevBump = currentBump;
+              return prevSorted;
+            }
+          }
+
+          prevFiltered = filtered;
+          prevOperands = operandSlice;
+          prevBump = currentBump;
+          prevSorted = doSort(filtered, dataMap, buildRV(rStores, operandSlice));
+          return prevSorted;
         });
       }
     }

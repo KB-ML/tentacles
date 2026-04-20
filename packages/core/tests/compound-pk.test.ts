@@ -21,7 +21,7 @@ describe("Compound PK: basic creation", () => {
 
     expect(inst.$role.getState()).toBe("admin");
     expect(typeof inst.__id).toBe("string");
-    expect(model.instance("u1", "p1").getState()).toBe(inst);
+    expect(model.get("u1", "p1")).toBe(inst);
 
     model.clear();
   });
@@ -50,13 +50,12 @@ describe("Compound PK: basic creation", () => {
   });
 });
 
-describe("Compound PK: instance() with positional args", () => {
+describe("Compound PK: get() with positional args", () => {
   it("retrieves instance with positional compound key args", () => {
     const model = createAssignmentModel();
     model.create({ userId: "u1", projectId: "p1", role: "admin" });
 
-    const $found = model.instance("u1", "p1");
-    const found = $found.getState();
+    const found = model.get("u1", "p1");
     expect(found).not.toBeNull();
     expect(found!.$role.getState()).toBe("admin");
 
@@ -67,44 +66,43 @@ describe("Compound PK: instance() with positional args", () => {
     const model = createAssignmentModel();
     model.create({ userId: "u1", projectId: "p1", role: "admin" });
 
-    expect(model.instance("u1", "p999").getState()).toBeNull();
-    expect(model.instance("u999", "p1").getState()).toBeNull();
+    expect(model.get("u1", "p999")).toBeNull();
+    expect(model.get("u999", "p1")).toBeNull();
 
     model.clear();
   });
 
-  it("instance() with serialized string also works", () => {
+  it("get() with serialized string also works", () => {
     const model = createAssignmentModel();
     const inst = model.create({ userId: "u1", projectId: "p1", role: "admin" });
 
-    const found = model.instance(inst.__id).getState();
+    const found = model.get(inst.__id);
     expect(found).toBe(inst);
 
     model.clear();
   });
 
-  it("returns the same store for the same args (memoization)", () => {
+  it("returns the same instance proxy for the same args (stable identity)", () => {
     const model = createAssignmentModel();
     model.create({ userId: "u1", projectId: "p1", role: "admin" });
 
-    const $a = model.instance("u1", "p1");
-    const $b = model.instance("u1", "p1");
-    expect($a).toBe($b);
+    const a = model.get("u1", "p1");
+    const b = model.get("u1", "p1");
+    expect(a).toBe(b);
 
     model.clear();
   });
 
-  it("reactively updates when instance is created and deleted", () => {
+  it("reflects instance presence as creates and deletes occur", () => {
     const model = createAssignmentModel();
-    const $inst = model.instance("u1", "p1");
 
-    expect($inst.getState()).toBeNull();
+    expect(model.get("u1", "p1")).toBeNull();
 
     const inst = model.create({ userId: "u1", projectId: "p1", role: "admin" });
-    expect($inst.getState()).toBe(inst);
+    expect(model.get("u1", "p1")).toBe(inst);
 
     model.delete(inst.__id);
-    expect($inst.getState()).toBeNull();
+    expect(model.get("u1", "p1")).toBeNull();
   });
 });
 
@@ -153,75 +151,6 @@ describe("Compound PK: $ids and $pkeys stores", () => {
   });
 });
 
-describe("Compound PK: $byPartialKey", () => {
-  it("finds all instances matching a prefix", () => {
-    const model = createAssignmentModel();
-    model.create({ userId: "u1", projectId: "p1", role: "admin" });
-    model.create({ userId: "u1", projectId: "p2", role: "member" });
-    model.create({ userId: "u2", projectId: "p1", role: "member" });
-
-    const u1Results = model.byPartialKey("u1").getState();
-    expect(u1Results).toHaveLength(2);
-    expect(u1Results[0]!.$role.getState()).toBe("admin");
-    expect(u1Results[1]!.$role.getState()).toBe("member");
-
-    const u2Results = model.byPartialKey("u2").getState();
-    expect(u2Results).toHaveLength(1);
-
-    model.clear();
-  });
-
-  it("finds exact match with full compound key", () => {
-    const model = createAssignmentModel();
-    model.create({ userId: "u1", projectId: "p1", role: "admin" });
-    model.create({ userId: "u1", projectId: "p2", role: "member" });
-
-    const results = model.byPartialKey("u1", "p2").getState();
-    expect(results).toHaveLength(1);
-    expect(results[0]!.$role.getState()).toBe("member");
-
-    model.clear();
-  });
-
-  it("returns empty array when no match", () => {
-    const model = createAssignmentModel();
-    model.create({ userId: "u1", projectId: "p1", role: "admin" });
-
-    expect(model.byPartialKey("u999").getState()).toEqual([]);
-
-    model.clear();
-  });
-
-  it("returns the same store for the same prefix (memoization)", () => {
-    const model = createAssignmentModel();
-
-    const $a = model.byPartialKey("u1");
-    const $b = model.byPartialKey("u1");
-    expect($a).toBe($b);
-
-    model.clear();
-  });
-
-  it("reactively updates when matching instances change", () => {
-    const model = createAssignmentModel();
-    const $u1 = model.byPartialKey("u1");
-
-    expect($u1.getState()).toEqual([]);
-
-    const inst = model.create({ userId: "u1", projectId: "p1", role: "admin" });
-    expect($u1.getState()).toHaveLength(1);
-    expect($u1.getState()[0]).toBe(inst);
-
-    model.create({ userId: "u1", projectId: "p2", role: "member" });
-    expect($u1.getState()).toHaveLength(2);
-
-    model.delete(inst.__id);
-    expect($u1.getState()).toHaveLength(1);
-
-    model.clear();
-  });
-});
-
 describe("Compound PK: delete", () => {
   it("deletes instance by serialized compound key", () => {
     const model = createAssignmentModel();
@@ -230,7 +159,7 @@ describe("Compound PK: delete", () => {
 
     model.delete(id);
 
-    expect(model.instance("u1", "p1").getState()).toBeNull();
+    expect(model.get("u1", "p1")).toBeNull();
     expect(model.$ids.getState()).toEqual([]);
     expect(model.$pkeys.getState()).toEqual([]);
   });
@@ -244,7 +173,7 @@ describe("Compound PK: delete", () => {
 
     expect(model.$ids.getState()).toEqual([]);
     expect(model.$pkeys.getState()).toEqual([]);
-    expect(model.instance("u1", "p1").getState()).toBeNull();
+    expect(model.get("u1", "p1")).toBeNull();
   });
 });
 
@@ -394,9 +323,9 @@ describe("Compound PK: createMany", () => {
     expect(model.$ids.getState()).toHaveLength(3);
     expect(model.$pkeys.getState()).toHaveLength(3);
 
-    expect(model.instance("u1", "p1").getState()).not.toBeNull();
-    expect(model.instance("u1", "p2").getState()).not.toBeNull();
-    expect(model.instance("u2", "p1").getState()).not.toBeNull();
+    expect(model.get("u1", "p1")).not.toBeNull();
+    expect(model.get("u1", "p2")).not.toBeNull();
+    expect(model.get("u2", "p1")).not.toBeNull();
 
     model.clear();
   });
@@ -420,14 +349,16 @@ describe("Compound PK: 3-part compound key", () => {
     model.create({ org: "acme", team: "eng", userId: "u2", role: "member" });
     model.create({ org: "acme", team: "sales", userId: "u1", role: "member" });
 
-    const inst = model.instance("acme", "eng", "u1").getState();
+    const inst = model.get("acme", "eng", "u1");
     expect(inst).not.toBeNull();
     expect(inst!.$role.getState()).toBe("lead");
 
-    const acmeEng = model.byPartialKey("acme", "eng").getState();
+    const acmeEng = model.$pkeys
+      .getState()
+      .filter((pk) => pk[0] === "acme" && pk[1] === "eng");
     expect(acmeEng).toHaveLength(2);
 
-    const acme = model.byPartialKey("acme").getState();
+    const acme = model.$pkeys.getState().filter((pk) => pk[0] === "acme");
     expect(acme).toHaveLength(3);
 
     expect(model.$pkeys.getState()).toEqual([

@@ -307,13 +307,13 @@ describe("FN EXTENSIONS: $instances and $instance", () => {
 
   it("$instances returns instances with extensions", () => {
     model.create({ id: "r1" });
-    const instances = model.$instances.getState();
+    const instances = model.instances();
     expect(instances[0]?.$tag.getState()).toBe("default");
   });
 
   it("$instance returns instance with extensions", () => {
     model.create({ id: "r2" });
-    const inst = model.instance("r2").getState();
+    const inst = model.get("r2");
     expect(inst?.$tag.getState()).toBe("default");
   });
 });

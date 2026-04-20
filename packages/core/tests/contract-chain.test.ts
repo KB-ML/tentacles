@@ -197,9 +197,10 @@ describe("Chain: refs", () => {
       .ref("items", "many")
       .pk("id");
 
-    const todoModel = createModel({ contract: todoContract });
-    todoModel.bind({ items: () => itemModel });
-
+    const todoModel = createModel({ contract: todoContract,
+    refs: { items: () => itemModel },
+  });
+   
     const todo = todoModel.create({ id: "t1", title: "List" });
     expect(todo.items.$ids.getState()).toEqual([]);
 

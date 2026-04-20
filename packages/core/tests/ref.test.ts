@@ -25,9 +25,9 @@ describe("Ref: basic many API", () => {
   const model = createModel({
     contract,
     fn: ({ $title, items }) => ({ $title, items }),
+    refs: { items: () => targetModel },
   });
-  model.bind({ items: () => targetModel });
-
+ 
   it("fn receives $ids, add, remove", () => {
     const inst = model.create({ id: "m1", title: "t" });
     expect(inst.items).toHaveProperty("$ids");
@@ -74,9 +74,9 @@ describe("Ref: basic one API", () => {
   const model = createModel({
     contract,
     fn: ({ $title, current }) => ({ $title, current }),
+    refs: { current: () => targetModel },
   });
-  model.bind({ current: () => targetModel });
-
+ 
   it("fn receives $id, set, clear", () => {
     const inst = model.create({ id: "o1", title: "t" });
     expect(inst.current).toHaveProperty("$id");
@@ -112,9 +112,9 @@ describe("Ref: SIDs", () => {
       contract,
       name: "sidMany",
       fn: ({ items }) => ({ items }),
-    });
-    model.bind({ items: () => targetModel });
-    const inst = model.create({ id: "s1" });
+    refs: { items: () => targetModel },
+  });
+       const inst = model.create({ id: "s1" });
     // $ids is a virtual store (backed by $dataMap) — no own SID
     expect(inst.items.add.sid).toBe("tentacles:sidMany:s1:items:add");
     expect(inst.items.remove.sid).toBe("tentacles:sidMany:s1:items:remove");
@@ -129,10 +129,9 @@ describe("Ref: SIDs", () => {
       contract,
       name: "sidOne",
       fn: ({ current }) => ({ current }),
-
-    });
-    model.bind({ current: () => targetModel });
-    const inst = model.create({ id: "s2" });
+    refs: { current: () => targetModel },
+  });
+       const inst = model.create({ id: "s2" });
     // $id is a virtual store (backed by $dataMap) — no own SID
     expect(inst.current.set.sid).toBe("tentacles:sidOne:s2:current:set");
     expect(inst.current.clear.sid).toBe("tentacles:sidOne:s2:current:clear");
@@ -149,9 +148,9 @@ describe("Ref: instance lifecycle", () => {
   const model = createModel({
     contract,
     fn: ({ items }) => ({ items }),
+    refs: { items: () => targetModel },
   });
-  model.bind({ items: () => targetModel });
-
+ 
   it("multiple instances have independent ref stores", () => {
     const a = model.create({ id: "lc-a" });
     const b = model.create({ id: "lc-b" });
@@ -188,9 +187,9 @@ describe("Ref: scoped creation", () => {
   const model = createModel({
     contract,
     fn: ({ $name, items }) => ({ $name, items }),
+    refs: { items: () => targetModel },
   });
-  model.bind({ items: () => targetModel });
-
+ 
   it("refs work with scope", async () => {
     const scope = fork();
     const inst = await model.create({ id: "sc1", name: "t" }, { scope });
@@ -226,10 +225,9 @@ describe("Ref: builder integration", () => {
         );
         return { items, addItem };
       },
-
-    });
-    model.bind({ items: () => targetModel });
-    const inst = model.create({ id: "b1" });
+    refs: { items: () => targetModel },
+  });
+       const inst = model.create({ id: "b1" });
     inst.addItem("via-event");
     expect(inst.items.$ids.getState()).toEqual(["via-event"]);
   });
@@ -372,9 +370,9 @@ describe("Ref: mixed contracts", () => {
         $count.on(inc, (n) => n + 1);
         return { $count, inc, items, current };
       },
-    });
-    model.bind({ items: () => targetModel, current: () => targetModel });
-
+    refs: { items: () => targetModel, current: () => targetModel },
+  });
+   
     const inst = model.create({ id: "mx1", count: 0 });
     inst.inc();
     inst.items.add("r1");
@@ -394,9 +392,9 @@ describe("Ref: mixed contracts", () => {
     const model = createModel({
       contract,
       fn: ({ $name, items }) => ({ $name, items }),
-    });
-    model.bind({ items: () => targetModel });
-    // data only requires "name", not "items" — this compiles
+    refs: { items: () => targetModel },
+  });
+       // data only requires "name", not "items" — this compiles
     const inst = model.create({ id: "de1", name: "test" });
     expect(inst.items.$ids.getState()).toEqual([]);
   });

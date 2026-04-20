@@ -6,7 +6,6 @@ import type { ModelInstanceId } from "../../model/types";
 export interface QueryContext<Instance> {
   readonly $ids: Store<ModelInstanceId[]>;
   readonly $idSet: Store<Set<ModelInstanceId>>;
-  readonly $instances: Store<Instance[]>;
   readonly $dataMap: Store<Record<string, Record<string, unknown>>>;
   getInstance(id: ModelInstanceId): Instance | undefined;
   /** Scope-aware: reconstructs from provided dataMap snapshot (for fork({ values }) hydration) */

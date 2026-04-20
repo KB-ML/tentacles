@@ -135,7 +135,7 @@ Derived fields are read-only on instances. You cannot call `.set()` or `.on()` o
 >
 ```
 
-Declares a relationship to another model. The target model is resolved lazily through `Model.bind({ <refName>: () => TargetModel })` or by providing an inline thunk on the ref — either way, the target does not need to exist at contract-build time.
+Declares a relationship to another model. The target is resolved at model-construction time via `createModel({ contract, refs: { <refName>: () => TargetModel } })` — the target does not need to exist when the contract is declared.
 
 | Argument | Meaning |
 |---|---|
@@ -171,7 +171,7 @@ The default `onDelete` is `"nullify"`. Omitting `options` is equivalent to `{ on
 >
 ```
 
-Declares a reverse lookup — a reactive list of instances whose ref (named `refField`, on a model registered via `.bind()`) points to this instance. Inverses are read-only projections over the inverse index.
+Declares a reverse lookup — a reactive list of instances whose ref (named `refField`, on a model wired via `createModel`'s `refs` option) points to this instance. Inverses are read-only projections over the inverse index.
 
 ```ts
 const userContract = createContract()
@@ -180,7 +180,7 @@ const userContract = createContract()
   .pk("id")
 ```
 
-On instances, an inverse appears under `$<name>` as `Store<unknown[]>`. The target model is supplied through `.bind()` on the generated user model — tentacles resolves the inverse by consulting the bound model's ref metadata.
+On instances, an inverse appears under `$<name>` as `Store<unknown[]>`. The source model is supplied through the `refs` option on `createModel` — tentacles resolves the inverse by consulting that model's ref metadata.
 
 **Throws** on duplicate field name.
 

@@ -156,15 +156,15 @@ If the data of an instance that is already in the filtered set changes, and the 
 
 But if the changed field is not one of the sort fields, the sort does not need to re-run — the order is the same as it was.
 
-### The `$lastField` trick
+### The `$sortFieldBump` trick
 
-We added a `$lastField` optimization to take advantage of this.
+We added a `$sortFieldBump` optimization to take advantage of this.
 
-The query tracks which field was last updated (via the same `$fieldUpdated` event).
+The query maintains a counter that increments (via the same `$fieldUpdated` event) **only** when the mutated field is one of the sort fields.
 
-When the sort stage is about to re-evaluate, it checks `$lastField` against the list of sort fields.
+When the sort stage is about to re-evaluate, it compares the counter to the value it saw last time. If the counter did not advance and the filtered set did not structurally change, the sort stage short-circuits and keeps its previous value.
 
-If the last-updated field is not a sort field and the filtered set did not structurally change, the sort stage short-circuits and keeps its previous value.
+Using a monotonic counter instead of a "last field name" store matters: a store deduplicates on equal values, so two consecutive mutations to the *same* sort field would look like no change. The counter emits a distinct value every time, so every real sort-field mutation is observed.
 
 ### The performance impact
 
@@ -358,7 +358,7 @@ If the update was a structural change — an instance was created or deleted, or
 
 If you are seeing more re-renders than you expect, look at the operand stores. A reactive operand changing fires the full scan.
 
-If you are seeing slow sorts despite simple field changes, look at whether the changed field is a sort field. If it is, the sort runs. If not, the `$lastField` optimization should keep it from running.
+If you are seeing slow sorts despite simple field changes, look at whether the changed field is a sort field. If it is, the sort runs. If not, the `$sortFieldBump` optimization should keep it from running.
 
 ### When to suspect the library
 
@@ -392,7 +392,7 @@ The query layer has two update paths because the common case is different from t
 
 The full scan handles structural and operand changes; the incremental path handles single-field mutations.
 
-The sort short-circuits when the changed field is not a sort field, via `$lastField`.
+The sort short-circuits when the changed field is not a sort field, via `$sortFieldBump`.
 
 `QueryField` derives directly from `$ids` and `$dataMap` — no per-row allocation on column reads.
 

@@ -1,7 +1,22 @@
 import { ViewModelDefinition } from "@kbml-tentacles/core";
-import { is, type Store } from "effector";
+import { is, type Scope, type Store } from "effector";
 import { useUnit } from "effector-vue/composition";
-import { computed, inject, markRaw, type Ref, toRaw } from "vue";
+import { computed, getCurrentInstance, inject, markRaw, type Ref, toRaw } from "vue";
+
+/**
+ * Mirrors effector-vue/composition's internal scope resolution. The SSR plugin
+ * sets `appContext.config.globalProperties.scopeName` and `app.provide(scopeName, scope)`,
+ * and `useUnit` reads it back via `inject(scopeName)`. We replicate that here so
+ * `model.getSync(id, scope)` can read the forked scope's $dataMap.
+ */
+function useProvidedScope(): Scope | null {
+  const instance = getCurrentInstance();
+  const scopeName = instance?.appContext.config.globalProperties.scopeName as string | undefined;
+  if (!scopeName) return null;
+  const scope = inject<Scope | null>(scopeName, null);
+  return scope ?? null;
+}
+
 import { getModelContext, getViewContext } from "./each";
 import type { ModelInstanceId, ModelLike } from "./types";
 
@@ -43,14 +58,29 @@ function useModelById<Instance>(
   model: ModelLike<Instance>,
   id: ModelInstanceId,
 ): Ref<Instance | null> {
-  return useUnit(markRaw(model.instance(id))) as Ref<Instance | null>;
+  const presentRef = useUnit(markRaw(model.has(id)));
+  const scope = useProvidedScope();
+  return computed(() => {
+    if (!presentRef.value) return null;
+    return scope
+      ? ((model.getSync(id, scope) as Instance | undefined) ?? null)
+      : ((model.get(id) as Instance) ?? null);
+  });
 }
 
 function useModelByKey<Instance>(
   model: ModelLike<Instance>,
   ...parts: [string | number, string | number, ...(string | number)[]]
 ): Ref<Instance | null> {
-  return useUnit(markRaw(model.instance(...parts))) as Ref<Instance | null>;
+  const serialized = parts.map(String).join("\x00");
+  const presentRef = useUnit(markRaw(model.has(serialized)));
+  const scope = useProvidedScope();
+  return computed(() => {
+    if (!presentRef.value) return null;
+    return scope
+      ? ((model.getByKeySync(...parts, scope) as Instance | undefined) ?? null)
+      : ((model.get(...parts) as Instance) ?? null);
+  });
 }
 
 function useModelReactive<Instance>(
@@ -58,10 +88,20 @@ function useModelReactive<Instance>(
   $id: Store<ModelInstanceId | null>,
 ): Ref<Instance | null> {
   const idRef = useUnit(markRaw(toRaw($id)));
+  // Subscribe to the model's $ids store — it only emits when ids mutate
+  // (add / remove / clear / reorder), NOT on field changes. This is the
+  // minimal reactive surface we need: we depend on the current $id and
+  // on membership, and we already depend on $id via idRef.
+  const idsRef = useUnit(markRaw(model.$ids));
+  const scope = useProvidedScope();
   return computed(() => {
     const id = idRef.value as ModelInstanceId | null;
     if (id == null) return null;
-    return (model.getSync(id) as Instance) ?? null;
+    const ids = idsRef.value as ModelInstanceId[];
+    if (!ids.includes(id) && !ids.includes(String(id))) return null;
+    return scope
+      ? ((model.getSync(id, scope) as Instance | undefined) ?? null)
+      : ((model.get(id) as Instance) ?? null);
   });
 }
 

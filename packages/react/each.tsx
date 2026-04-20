@@ -1,7 +1,7 @@
 import type { ScopeEntry } from "@kbml-tentacles/core";
 import { resolveFrom } from "@kbml-tentacles/core";
 import { is, type Store } from "effector";
-import { useUnit } from "effector-react";
+import { useProvidedScope, useUnit } from "effector-react";
 import { type Context, createContext, memo, type ReactNode, useContext, useMemo } from "react";
 import type { ModelInstanceId, ModelLike } from "./types";
 
@@ -114,29 +114,61 @@ interface EachItemProps<Instance = unknown> {
   children?: ReactNode | ((instance: Instance) => ReactNode);
 }
 
-const EachItem = memo(function EachItem({ id, model, parentStack, children }: EachItemProps) {
-  const ModelContext = getModelContext(model);
-  // Subscribe to model.instance(id) so we react to instance replacement (same ID, new object)
-  const instance = useUnit(model.instance(id));
+type ChildrenProp = EachItemProps["children"];
 
-  const stack = useMemo(
-    () =>
-      instance
-        ? [...parentStack, { model, instance: instance as Record<string, unknown> }]
-        : parentStack,
-    [parentStack, model, instance],
-  );
+function childrenEqual(a: ChildrenProp, b: ChildrenProp): boolean {
+  if (Object.is(a, b)) return true;
+  if (!a || !b || typeof a !== "object" || typeof b !== "object") return false;
+  if (!("type" in a) || !("type" in b)) return false;
+  if (a.type !== b.type) return false;
+  const pa = (a as { props: Record<string, unknown> }).props;
+  const pb = (b as { props: Record<string, unknown> }).props;
+  if (!pa || !pb) return pa === pb;
+  const keys = new Set([...Object.keys(pa), ...Object.keys(pb)]);
+  for (const k of keys) {
+    if (k === "children") continue;
+    if (!Object.is(pa[k], pb[k])) return false;
+  }
+  return true;
+}
 
-  if (!instance) return null;
+const EachItem = memo(
+  function EachItem({ id, model, parentStack, children }: EachItemProps) {
+    const ModelContext = getModelContext(model);
+    // Parent <EachSource> subscribes to $ids and unmounts rows when an id
+    // disappears — the id is guaranteed to exist when this row renders.
+    // We intentionally do NOT subscribe to $idSet here: $idSet emits a new
+    // Set reference on every $ids upstream emission (including field-driven
+    // re-emissions from query stores), causing every row to re-render on
+    // any change anywhere.
+    const scope = useProvidedScope();
+    const instance = scope ? (model.getSync(id, scope) ?? null) : model.get(id);
 
-  return (
-    <ScopeStackContext.Provider value={stack}>
-      <ModelContext.Provider value={instance}>
-        {typeof children === "function" ? (children as Function)(instance) : children}
-      </ModelContext.Provider>
-    </ScopeStackContext.Provider>
-  );
-}) as <Instance>(props: EachItemProps<Instance>) => ReactNode;
+    const stack = useMemo(
+      () =>
+        instance
+          ? [...parentStack, { model, instance: instance as Record<string, unknown> }]
+          : parentStack,
+      [parentStack, model, instance],
+    );
+
+    // Defensive no-op for edge cases (e.g. race between unmount and parent emit).
+    if (!instance) return null;
+
+    return (
+      <ScopeStackContext.Provider value={stack}>
+        <ModelContext.Provider value={instance}>
+          {typeof children === "function" ? (children as Function)(instance) : children}
+        </ModelContext.Provider>
+      </ScopeStackContext.Provider>
+    );
+  },
+  (prev, next) =>
+    prev.id === next.id &&
+    prev.model === next.model &&
+    prev.parentStack === next.parentStack &&
+    childrenEqual(prev.children, next.children),
+) as <Instance>(props: EachItemProps<Instance>) => ReactNode;
 
 // ═══ Static ID mode — scope a single instance ═══
 
@@ -149,7 +181,10 @@ interface EachStaticIdProps<Instance = unknown> {
 function EachStaticId<Instance>({ model, id, children }: EachStaticIdProps<Instance>) {
   const parentStack = useContext(ScopeStackContext);
   const ModelContext = getModelContext(model);
-  const instance = useUnit(model.instance(id));
+  const $present = useMemo(() => model.has(id), [model, id]);
+  const present = useUnit($present);
+  const scope = useProvidedScope();
+  const instance = present ? (scope ? (model.getSync(id, scope) ?? null) : model.get(id)) : null;
 
   // All hooks above — safe to early-return below
   const stack = useMemo(

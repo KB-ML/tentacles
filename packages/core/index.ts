@@ -28,7 +28,14 @@ export type {
 } from "./layers/contract/types/contract-chain";
 export type { ContractEntity, ContractStore } from "./layers/contract/types/contract-entity";
 export { createModel } from "./layers/model/create-model";
-export type { ApplyBind, CompoundKey, PkResult } from "./layers/model/model";
+export type {
+  ApplyBind,
+  ApplyRefs,
+  BindableFieldNames,
+  CompoundKey,
+  PkResult,
+  RefsConfig,
+} from "./layers/model/model";
 export type {
   ContractModelRefData,
   ContractModelRefOperations,

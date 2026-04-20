@@ -1,12 +1,12 @@
 import { ViewModelDefinition } from "@kbml-tentacles/core";
-import { createStore, is, type Store } from "effector";
-import { useUnit } from "effector-react";
-import { useContext } from "react";
+import { is, type Store } from "effector";
+import { useProvidedScope, useUnit } from "effector-react";
+import { useContext, useMemo } from "react";
 import { getModelContext, getViewContext } from "./each";
 import type { ModelInstanceId, ModelLike } from "./types";
 
-/** Sentinel store for null instance — shared across all useModel calls */
-const $nullInstance = createStore<null>(null, { serialize: "ignore" });
+// Compound-key delimiter — must match `InstanceCache.COMPOUND_PK_DELIMITER` in core.
+const COMPOUND_PK_DELIMITER = "\x00";
 
 // ═══ VM branch ═══
 
@@ -19,7 +19,7 @@ function useModelFromView<Shape>(definition: ViewModelDefinition<Shape>): Shape 
   return shape;
 }
 
-// ═══ Model branches (same as former useScopedModel) ═══
+// ═══ Model branches ═══
 
 function useModelContext<Instance>(model: ModelLike<Instance>): Instance {
   const ctx = getModelContext(model);
@@ -30,15 +30,28 @@ function useModelContext<Instance>(model: ModelLike<Instance>): Instance {
   return instance;
 }
 
+function serializeParts(parts: readonly (string | number)[]): string {
+  return parts.length === 1 ? String(parts[0]) : parts.map(String).join(COMPOUND_PK_DELIMITER);
+}
+
 function useModelById<Instance>(model: ModelLike<Instance>, id: ModelInstanceId): Instance | null {
-  return useUnit(model.instance(id));
+  const $present = useMemo(() => model.has(id), [model, id]);
+  const present = useUnit($present);
+  const scope = useProvidedScope();
+  if (!present) return null;
+  return scope ? (model.getSync(id, scope) ?? null) : model.get(id);
 }
 
 function useModelByKey<Instance>(
   model: ModelLike<Instance>,
   ...parts: [string | number, string | number, ...(string | number)[]]
 ): Instance | null {
-  return useUnit(model.instance(...parts));
+  const serialized = serializeParts(parts);
+  const $present = useMemo(() => model.has(serialized), [model, serialized]);
+  const present = useUnit($present);
+  const scope = useProvidedScope();
+  if (!present) return null;
+  return scope ? (model.getByKeySync(...parts, scope) ?? null) : model.get(...parts);
 }
 
 function useModelReactive<Instance>(
@@ -46,8 +59,13 @@ function useModelReactive<Instance>(
   $id: Store<ModelInstanceId | null>,
 ): Instance | null {
   const id = useUnit($id);
-  const $inst = id != null ? model.instance(id) : $nullInstance;
-  return useUnit($inst) as Instance | null;
+  // Stable fallback id ("") so the hook count is constant across renders.
+  const $present = useMemo(() => model.has(id ?? ""), [model, id]);
+  const present = useUnit($present);
+  const scope = useProvidedScope();
+  if (id == null) return null;
+  if (!present) return null;
+  return scope ? (model.getSync(id, scope) ?? null) : model.get(id);
 }
 
 // ═══ Public overloads ═══

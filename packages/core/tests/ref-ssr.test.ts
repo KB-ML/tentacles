@@ -37,9 +37,9 @@ describe("REF SSR: many — serialize / hydrate", () => {
     contract,
     name: "refSsrMany",
     fn: ({ $title, items }) => ({ $title, items }),
+    refs: { items: () => targetModel },
   });
-  model.bind({ items: () => targetModel });
-
+ 
   it("ref $ids survives serialize → hydrate", async () => {
     const inst = model.create({ id: "rms-1", title: "t" });
     const scope = fork();
@@ -100,9 +100,9 @@ describe("REF SSR: one — serialize / hydrate", () => {
     contract,
     name: "refSsrOne",
     fn: ({ $label, current }) => ({ $label, current }),
+    refs: { current: () => targetModel },
   });
-  model.bind({ current: () => targetModel });
-
+ 
   it("ref $id survives serialize → hydrate", async () => {
     const inst = model.create({ id: "ros-1", label: "l" });
     const scope = fork();
@@ -166,9 +166,9 @@ describe("REF SSR: mixed contract serialize", () => {
         $count.on(inc, (n) => n + 1);
         return { $count, inc, items, current };
       },
-    });
-    model.bind({ items: () => targetModel, current: () => targetModel });
-
+    refs: { items: () => targetModel, current: () => targetModel },
+  });
+   
     const inst = model.create({ id: "mix-1", count: 0 });
     const scope = fork();
 
@@ -203,10 +203,9 @@ describe("REF SSR: scope isolation", () => {
     contract,
     name: "refSsrIso",
     fn: ({ items, current }) => ({ items, current }),
-
+    refs: { items: () => targetModel, current: () => targetModel },
   });
-  model.bind({ items: () => targetModel, current: () => targetModel });
-
+ 
   it("two scopes with same instance have independent ref state", async () => {
     const inst = model.create({ id: "iso-1" });
 
@@ -277,9 +276,9 @@ describe("REF SSR: concurrent requests", () => {
       contract,
       name: "refSsrConc",
       fn: ({ $name, items }) => ({ $name, items }),
-    });
-    model.bind({ items: () => targetModel });
-
+    refs: { items: () => targetModel },
+  });
+   
     const inst = model.create({ id: "conc-1", name: "shared" });
 
     const results = await Promise.all(
@@ -319,9 +318,9 @@ describe("REF SSR: delete + re-create SID collision", () => {
       contract,
       name: "refSsrEph",
       fn: ({ items }) => ({ items }),
-    });
-    model.bind({ items: () => targetModel });
-
+    refs: { items: () => targetModel },
+  });
+   
     const v1 = model.create({ id: "eph" });
     const v1Sid = v1.items.$ids.sid;
 
@@ -352,9 +351,9 @@ describe("REF SSR: delete + re-create SID collision", () => {
       contract,
       name: "refSsrEph2",
       fn: ({ current }) => ({ current }),
-    });
-    model.bind({ current: () => targetModel });
-
+    refs: { current: () => targetModel },
+  });
+   
     const v1 = model.create({ id: "eph2" });
     const scope1 = fork();
     await allSettled(v1.current.set, { scope: scope1, params: "leaked-id" });
@@ -385,10 +384,9 @@ describe("REF SSR: global mutation before fork", () => {
       contract,
       name: "refSsrGm1",
       fn: ({ items, current }) => ({ items, current }),
-
-    });
-    model.bind({ items: () => targetModel, current: () => targetModel });
-
+    refs: { items: () => targetModel, current: () => targetModel },
+  });
+   
     const inst = model.create({ id: "gm-1" });
 
     // Accidental global mutation
@@ -413,9 +411,9 @@ describe("REF SSR: global mutation before fork", () => {
       contract,
       name: "refSsrGm2",
       fn: ({ items }) => ({ items }),
-    });
-    model.bind({ items: () => targetModel });
-
+    refs: { items: () => targetModel },
+  });
+   
     const inst = model.create({ id: "gm-2" });
 
     // Pollute global
@@ -446,9 +444,9 @@ describe("REF SSR: scoped creation", () => {
     contract,
     name: "refSsrScoped",
     fn: ({ $name, items, current }) => ({ $name, items, current }),
+    refs: { items: () => targetModel, current: () => targetModel },
   });
-  model.bind({ items: () => targetModel, current: () => targetModel });
-
+ 
   it("scoped instance refs serialize correctly", async () => {
     const scope = fork();
     const inst = await model.create({ id: "rs-1", name: "test" }, { scope });
@@ -577,9 +575,9 @@ describe("REF SSR: full request lifecycle", () => {
       contract,
       name: "refSsrPage",
       fn: ({ $title, items, selected }) => ({ $title, items, selected }),
-    });
-    model.bind({ items: () => targetModel, selected: () => targetModel });
-
+    refs: { items: () => targetModel, selected: () => targetModel },
+  });
+   
     // Server
     const inst = model.create({ id: "page-1", title: "My Page" });
     const serverScope = fork();
@@ -618,9 +616,9 @@ describe("REF SSR: full request lifecycle", () => {
       contract,
       name: "refSsrSrv",
       fn: ({ items }) => ({ items }),
-    });
-    model.bind({ items: () => targetModel });
-
+    refs: { items: () => targetModel },
+  });
+   
     // Server: create, mutate, serialize
     const inst = model.create({ id: "srv-1" });
     const serverScope = fork();
@@ -656,10 +654,9 @@ describe("REF SSR: SID format in serialized output", () => {
       contract,
       name: "sidFormat",
       fn: ({ items, current }) => ({ items, current }),
-
-    });
-    model.bind({ items: () => targetModel, current: () => targetModel });
-
+    refs: { items: () => targetModel, current: () => targetModel },
+  });
+   
     const inst = model.create({ id: "sf-1" });
     const scope = fork();
 
@@ -699,9 +696,9 @@ describe("REF SSR: scale test", () => {
         $count.on(inc, (n) => n + 1);
         return { $count, inc, items };
       },
-    });
-    model.bind({ items: () => targetModel });
-
+    refs: { items: () => targetModel },
+  });
+   
     const instances = Array.from({ length: 20 }, (_, i) =>
       model.create({ id: `scale-${i}`, count: 0 }),
     );

@@ -1,17 +1,21 @@
-import type { Store } from "effector";
+import type { Scope, Store } from "effector";
 
 export type ModelInstanceId = string | number;
 
 /** Minimal interface for what the React layer needs from a Model */
 export interface ModelLike<Instance = unknown> {
   readonly name: string;
-  getSync(id: ModelInstanceId): Instance | undefined;
+  readonly $ids: Store<ModelInstanceId[]>;
+  readonly $idSet: Store<Set<ModelInstanceId>>;
+  has(id: ModelInstanceId): Store<boolean>;
+  has(...parts: [string | number, string | number, ...(string | number)[]]): Store<boolean>;
+  getSync(id: ModelInstanceId, scope?: Scope): Instance | undefined;
   getByKeySync(
-    ...parts: [string | number, string | number, ...(string | number)[]]
+    ...parts:
+      | [string | number, string | number, ...(string | number)[]]
+      | [string | number, string | number, ...(string | number)[], Scope]
   ): Instance | undefined;
   getRefMeta(field: string): { cardinality: "one" | "many"; target: unknown } | undefined;
-  instance(id: ModelInstanceId): Store<Instance | null>;
-  instance(
-    ...parts: [string | number, string | number, ...(string | number)[]]
-  ): Store<Instance | null>;
+  get(id: ModelInstanceId): Instance | null;
+  get(...parts: [string | number, string | number, ...(string | number)[]]): Instance | null;
 }

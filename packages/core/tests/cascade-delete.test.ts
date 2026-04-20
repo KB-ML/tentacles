@@ -28,9 +28,10 @@ describe("CASCADE: many ref", () => {
     .store("id", (s) => s<string>())
     .ref("items", "many", { onDelete: "cascade" })
     .pk("id");
-  const todoModel = createModel({ contract: todoContract });
-  todoModel.bind({ items: () => itemModel });
-
+  const todoModel = createModel({ contract: todoContract,
+    refs: { items: () => itemModel },
+  });
+ 
   it("delete owner cascades to all targets", () => {
     itemModel.create({ id: "ci1", name: "a" });
     itemModel.create({ id: "ci2", name: "b" });
@@ -63,9 +64,10 @@ describe("CASCADE: one ref", () => {
     .store("id", (s) => s<string>())
     .ref("current", "one", { onDelete: "cascade" })
     .pk("id");
-  const todoModel = createModel({ contract: todoContract });
-  todoModel.bind({ current: () => itemModel });
-
+  const todoModel = createModel({ contract: todoContract,
+    refs: { current: () => itemModel },
+  });
+ 
   it("delete owner cascades to single target", () => {
     itemModel.create({ id: "co1", name: "x" });
     const todo = todoModel.create({ id: "cot1" });
@@ -94,9 +96,10 @@ describe("RESTRICT: many ref", () => {
     .store("id", (s) => s<string>())
     .ref("items", "many", { onDelete: "restrict" })
     .pk("id");
-  const todoModel = createModel({ contract: todoContract });
-  todoModel.bind({ items: () => itemModel });
-
+  const todoModel = createModel({ contract: todoContract,
+    refs: { items: () => itemModel },
+  });
+ 
   it("restrict blocks deletion when ref is non-empty", () => {
     itemModel.create({ id: "ri1", name: "a" });
     const todo = todoModel.create({ id: "rt1" });
@@ -126,9 +129,10 @@ describe("RESTRICT: one ref", () => {
     .store("id", (s) => s<string>())
     .ref("current", "one", { onDelete: "restrict" })
     .pk("id");
-  const todoModel = createModel({ contract: todoContract });
-  todoModel.bind({ current: () => itemModel });
-
+  const todoModel = createModel({ contract: todoContract,
+    refs: { current: () => itemModel },
+  });
+ 
   it("restrict blocks deletion when ref is set", () => {
     itemModel.create({ id: "roi1", name: "x" });
     const todo = todoModel.create({ id: "rot1" });
@@ -156,9 +160,10 @@ describe("NULLIFY: default behavior", () => {
     .store("id", (s) => s<string>())
     .ref("items", "many")
     .pk("id");
-  const todoModel = createModel({ contract: todoContract });
-  todoModel.bind({ items: () => itemModel });
-
+  const todoModel = createModel({ contract: todoContract,
+    refs: { items: () => itemModel },
+  });
+ 
   it("targets are untouched when owner is deleted (backward compat)", () => {
     itemModel.create({ id: "ni1", name: "a" });
     itemModel.create({ id: "ni2", name: "b" });
@@ -192,9 +197,10 @@ describe("MIXED: restrict + cascade on same model", () => {
     .ref("items", "many", { onDelete: "cascade" })
     .ref("tags", "many", { onDelete: "restrict" })
     .pk("id");
-  const todoModel = createModel({ contract: todoContract });
-  todoModel.bind({ items: () => itemModel, tags: () => tagModel });
-
+  const todoModel = createModel({ contract: todoContract,
+    refs: { items: () => itemModel, tags: () => tagModel },
+  });
+ 
   it("restrict blocks deletion even if other refs are cascade", () => {
     itemModel.create({ id: "mi1", name: "a" });
     tagModel.create({ id: "mt1" });
@@ -225,16 +231,18 @@ describe("CASCADE CHAIN: A → B → C", () => {
       .store("id", (s) => s<string>())
       .ref("children", "many", { onDelete: "cascade" })
       .pk("id");
-    const bModel = createModel({ contract: bContract });
-    bModel.bind({ children: () => cModel });
-
+    const bModel = createModel({ contract: bContract,
+    refs: { children: () => cModel },
+  });
+   
     const aContract = createContract()
       .store("id", (s) => s<string>())
       .ref("children", "many", { onDelete: "cascade" })
       .pk("id");
-    const aModel = createModel({ contract: aContract });
-    aModel.bind({ children: () => bModel });
-
+    const aModel = createModel({ contract: aContract,
+    refs: { children: () => bModel },
+  });
+   
     cModel.create({ id: "c1" });
     cModel.create({ id: "c2" });
     const b = bModel.create({ id: "b1" });
@@ -266,16 +274,18 @@ describe("RESTRICT BLOCKS CASCADE CHAIN", () => {
       .store("id", (s) => s<string>())
       .ref("deps", "many", { onDelete: "restrict" })
       .pk("id");
-    const bModel = createModel({ contract: bContract });
-    bModel.bind({ deps: () => leafModel });
-
+    const bModel = createModel({ contract: bContract,
+    refs: { deps: () => leafModel },
+  });
+   
     const aContract = createContract()
       .store("id", (s) => s<string>())
       .ref("children", "many", { onDelete: "cascade" })
       .pk("id");
-    const aModel = createModel({ contract: aContract });
-    aModel.bind({ children: () => bModel });
-
+    const aModel = createModel({ contract: aContract,
+    refs: { children: () => bModel },
+  });
+   
     leafModel.create({ id: "leaf1" });
     const b = bModel.create({ id: "b1" });
     b.deps.add("leaf1");
@@ -301,17 +311,19 @@ describe("CIRCULAR CASCADE: A ↔ B", () => {
       .store("id", (s) => s<string>())
       .ref("partner", "one", { onDelete: "cascade" })
       .pk("id");
-    const aModel = createModel({ contract: aContract });
+    const aModel = createModel({ contract: aContract,
+    refs: { partner: () => bModel },
+  });
 
     const bContract = createContract()
       .store("id", (s) => s<string>())
       .ref("partner", "one", { onDelete: "cascade" })
       .pk("id");
-    const bModel = createModel({ contract: bContract });
+    const bModel = createModel({ contract: bContract,
+    refs: { partner: () => aModel },
+  });
 
-    aModel.bind({ partner: () => bModel });
-    bModel.bind({ partner: () => aModel });
-
+      
     const a = aModel.create({ id: "a1" });
     const b = bModel.create({ id: "b1" });
     a.partner.set("b1");
@@ -368,9 +380,10 @@ describe("CLEAR with cascade", () => {
       .store("id", (s) => s<string>())
       .ref("child", "one", { onDelete: "cascade" })
       .pk("id");
-    const parentModel = createModel({ contract: parentContract });
-    parentModel.bind({ child: () => childModel });
-
+    const parentModel = createModel({ contract: parentContract,
+    refs: { child: () => childModel },
+  });
+   
     childModel.create({ id: "c1" });
     childModel.create({ id: "c2" });
     const p1 = parentModel.create({ id: "p1" });
@@ -400,9 +413,10 @@ describe("deleteFx integration", () => {
       .store("id", (s) => s<string>())
       .ref("child", "one", { onDelete: "cascade" })
       .pk("id");
-    const parentModel = createModel({ contract: parentContract });
-    parentModel.bind({ child: () => childModel });
-
+    const parentModel = createModel({ contract: parentContract,
+    refs: { child: () => childModel },
+  });
+   
     childModel.create({ id: "c1" });
     const p = parentModel.create({ id: "p1" });
     p.child.set("c1");
@@ -423,9 +437,10 @@ describe("deleteFx integration", () => {
       .store("id", (s) => s<string>())
       .ref("deps", "many", { onDelete: "restrict" })
       .pk("id");
-    const parentModel = createModel({ contract: parentContract });
-    parentModel.bind({ deps: () => childModel });
-
+    const parentModel = createModel({ contract: parentContract,
+    refs: { deps: () => childModel },
+  });
+   
     childModel.create({ id: "c1" });
     const p = parentModel.create({ id: "p1" });
     p.deps.add("c1");
@@ -455,9 +470,10 @@ describe("RESTRICT error message", () => {
       .store("id", (s) => s<string>())
       .ref("deps", "many", { onDelete: "restrict" })
       .pk("id");
-    const ownerModel = createModel({ contract: ownerContract, name: "errOwner" });
-    ownerModel.bind({ deps: () => depModel });
-
+    const ownerModel = createModel({ contract: ownerContract, name: "errOwner",
+    refs: { deps: () => depModel },
+  });
+   
     depModel.create({ id: "d1" });
     const o = ownerModel.create({ id: "o1" });
     o.deps.add("d1");
@@ -506,9 +522,10 @@ describe("SSR: scoped cascade", () => {
       .store("id", (s) => s<string>())
       .ref("child", "one", { onDelete: "cascade" })
       .pk("id");
-    const parentModel = createModel({ contract: parentContract });
-    parentModel.bind({ child: () => childModel });
-
+    const parentModel = createModel({ contract: parentContract,
+    refs: { child: () => childModel },
+  });
+   
     const child = childModel.create({ id: "sc1", value: 10 });
     const parent = parentModel.create({ id: "sp1" });
     parent.child.set("sc1");
@@ -537,9 +554,10 @@ describe("SSR: scoped cascade", () => {
       .store("id", (s) => s<string>())
       .ref("deps", "many", { onDelete: "restrict" })
       .pk("id");
-    const ownerModel = createModel({ contract: ownerContract });
-    ownerModel.bind({ deps: () => depModel });
-
+    const ownerModel = createModel({ contract: ownerContract,
+    refs: { deps: () => depModel },
+  });
+   
     depModel.create({ id: "sd1" });
     const o = ownerModel.create({ id: "so1" });
     o.deps.add("sd1");
@@ -577,9 +595,10 @@ describe("MEMORY: cascade delete leak check", () => {
       .store("id", (s) => s<string>())
       .ref("child", "one", { onDelete: "cascade" })
       .pk("id");
-    const parentModel = createModel({ contract: parentContract });
-    parentModel.bind({ child: () => childModel });
-
+    const parentModel = createModel({ contract: parentContract,
+    refs: { child: () => childModel },
+  });
+   
     // Warmup
     for (let i = 0; i < 50; i++) {
       childModel.create({ id: `wc${i}`, data: "x".repeat(1000) });

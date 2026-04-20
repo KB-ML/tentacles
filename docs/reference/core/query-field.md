@@ -157,7 +157,7 @@ Prefer `.distinct("role")` on the underlying query if you only need one represen
 | `.ref("author", "one")` | unsupported — use `field("authorId")` via FK | — | — |
 | `.inverse("posts", ...)` | unsupported | — | — |
 
-For ref columns, query the FK scalar directly — Tentacles stores the foreign key under the contract field name, so `todoModel.query().field("assignee")` works when `assignee` is a ref with single cardinality. Follow-through to the linked model happens downstream through `Model.instance(id)`.
+For ref columns, query the FK scalar directly — Tentacles stores the foreign key under the contract field name, so `todoModel.query().field("assignee")` works when `assignee` is a ref with single cardinality. Follow-through to the linked model happens downstream through `Model.get(id)`.
 
 ## Memoisation
 

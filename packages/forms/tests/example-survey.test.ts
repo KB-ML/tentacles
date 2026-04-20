@@ -37,13 +37,13 @@ describe("Example: Survey editor (4-level nesting)", () => {
 
     // Add question to section
     const sectionIds = form.sections.$ids.getState();
-    const section = form.sections.instance(sectionIds[0]).getState();
+    const section = form.sections.get(sectionIds[0]);
     section.questions.append({ prompt: "What color?" });
     expect(section.questions.$count.getState()).toBe(1);
 
     // Add choices to question
     const questionIds = section.questions.$ids.getState();
-    const question = section.questions.instance(questionIds[0]).getState();
+    const question = section.questions.get(questionIds[0]);
     question.choices.append({ label: "Red", value: "red" });
     question.choices.append({ label: "Blue", value: "blue" });
     expect(question.choices.$count.getState()).toBe(2);

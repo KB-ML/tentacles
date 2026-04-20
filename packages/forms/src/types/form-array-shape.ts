@@ -6,7 +6,7 @@ import type { DeepErrors, DeepPartial, FormShape } from "./form-shape";
 /**
  * A form array IS a model from `@kbml-tentacles/core` extended with
  * form-specific aggregates and operations. `form.items` is both a
- * `FormArrayShape` and a `Model` — all model APIs ($ids, $instances,
+ * `FormArrayShape` and a `Model` — all model APIs ($ids, instances(),
  * query(), createFx, etc.) are available directly.
  */
 export interface FormArrayShape<Row extends Record<string, unknown>> {
@@ -38,8 +38,8 @@ export interface FormArrayShape<Row extends Record<string, unknown>> {
   readonly __path: readonly (string | number)[];
   readonly kind: "array";
 
-  // Model APIs are spread onto this at runtime ($ids, $count, $instances,
-  // instance(), query(), createFx, deleteFx, etc.) but not typed here
+  // Model APIs are spread onto this at runtime ($ids, $count, get(),
+  // instances(), query(), createFx, deleteFx, etc.) but not typed here
   // to avoid circular dependency with @kbml-tentacles/core's Model type.
   // Runtime: Object.assign(formArrayShape, rowModel)
   [key: string]: unknown;

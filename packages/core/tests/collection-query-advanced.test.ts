@@ -317,7 +317,7 @@ describe("COLLECTION QUERY ADVANCED: reactivity — field changes", () => {
     expect(over30.$count.getState()).toBe(0);
 
     // Change age to match
-    model.instance("2").getState()!.$age.set(31);
+    model.get("2")!.$age.set(31);
     expect(over30.$count.getState()).toBe(1);
     expect(over30.$ids.getState()).toEqual(["2"]);
   });
@@ -331,7 +331,7 @@ describe("COLLECTION QUERY ADVANCED: reactivity — field changes", () => {
     expect(over30.$count.getState()).toBe(2);
 
     // Change age to not match
-    model.instance("1").getState()!.$age.set(25);
+    model.get("1")!.$age.set(25);
     expect(over30.$count.getState()).toBe(1);
     expect(over30.$ids.getState()).toEqual(["2"]);
   });
@@ -350,8 +350,8 @@ describe("COLLECTION QUERY ADVANCED: reactivity — field changes", () => {
     ]);
 
     // Swap scores of Alice and Charlie
-    model.instance("1").getState()!.$score.set(3);
-    model.instance("3").getState()!.$score.set(1);
+    model.get("1")!.$score.set(3);
+    model.get("3")!.$score.set(1);
 
     expect(sorted.field("name").$values.getState()).toEqual([
       "Charlie",
@@ -369,7 +369,7 @@ describe("COLLECTION QUERY ADVANCED: reactivity — field changes", () => {
     expect(unique.$count.getState()).toBe(1); // both are "admin"
 
     // Change B's role to "user"
-    model.instance("2").getState()!.$role.set("user");
+    model.get("2")!.$role.set("user");
     expect(unique.$count.getState()).toBe(2); // now "admin" and "user"
   });
 
@@ -833,7 +833,7 @@ describe("COLLECTION QUERY ADVANCED: write terminals", () => {
 
     // Should have removed ages 25 and 30
     expect(model.$count.getState()).toBe(3);
-    const remaining = model.$instances.getState().map((i) => i.$age.getState());
+    const remaining = model.instances().map((i) => i.$age.getState());
     expect(remaining).toContain(20);
     expect(remaining).toContain(35);
     expect(remaining).toContain(40);
@@ -847,9 +847,9 @@ describe("COLLECTION QUERY ADVANCED: write terminals", () => {
 
     model.query().where("age", gt(30)).field("score").update(999);
 
-    expect(model.instance("1").getState()!.$score.getState()).toBe(10);
-    expect(model.instance("2").getState()!.$score.getState()).toBe(999);
-    expect(model.instance("3").getState()!.$score.getState()).toBe(999);
+    expect(model.get("1")!.$score.getState()).toBe(10);
+    expect(model.get("2")!.$score.getState()).toBe(999);
+    expect(model.get("3")!.$score.getState()).toBe(999);
   });
 
   it("query.update updates multiple fields at once", () => {
@@ -859,10 +859,10 @@ describe("COLLECTION QUERY ADVANCED: write terminals", () => {
 
     model.query().where("age", gt(30)).update({ role: "admin", score: 100 });
 
-    expect(model.instance("1").getState()!.$role.getState()).toBe("admin");
-    expect(model.instance("1").getState()!.$score.getState()).toBe(100);
-    expect(model.instance("2").getState()!.$role.getState()).toBe("admin");
-    expect(model.instance("2").getState()!.$score.getState()).toBe(100);
+    expect(model.get("1")!.$role.getState()).toBe("admin");
+    expect(model.get("1")!.$score.getState()).toBe(100);
+    expect(model.get("2")!.$role.getState()).toBe("admin");
+    expect(model.get("2")!.$score.getState()).toBe(100);
   });
 
   it("field().updated tracks changes from field().update", () => {

@@ -30,7 +30,7 @@ describe("Example: Comment thread (recursive)", () => {
     expect(form.replies.$count.getState()).toBe(1);
 
     const replyIds = form.replies.$ids.getState();
-    const reply = form.replies.instance(replyIds[0]).getState();
+    const reply = form.replies.get(replyIds[0]);
     expect(reply.author).toBeDefined();
     expect(reply.body).toBeDefined();
     expect(reply.replies.kind).toBe("array");
@@ -42,11 +42,11 @@ describe("Example: Comment thread (recursive)", () => {
 
     // Level 1
     form.replies.append({ author: "A", body: "Top" });
-    const l1 = form.replies.instance(form.replies.$ids.getState()[0]).getState();
+    const l1 = form.replies.get(form.replies.$ids.getState()[0]);
 
     // Level 2
     l1.replies.append({ author: "B", body: "Reply" });
-    const l2 = l1.replies.instance(l1.replies.$ids.getState()[0]).getState();
+    const l2 = l1.replies.get(l1.replies.$ids.getState()[0]);
 
     // Level 3
     l2.replies.append({ author: "C", body: "Deep" });

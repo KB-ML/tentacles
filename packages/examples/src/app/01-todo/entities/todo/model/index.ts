@@ -1,8 +1,15 @@
-import { categoryModel as categoryModelBase } from "./category";
-import { todoModel as todoModelBase } from "./todo";
+import { createModel } from "@kbml-tentacles/core";
+import { categoryContract } from "./category";
+import { todoContract } from "./todo";
 
-export const todoModel = todoModelBase.bind({ category: () => categoryModelBase });
-export const categoryModel = categoryModelBase.bind({ todos: () => todoModelBase });
+export const todoModel = createModel({
+  contract: todoContract,
+  refs: { category: () => categoryModel },
+});
+export const categoryModel = createModel({
+  contract: categoryContract,
+  refs: { todos: () => todoModel },
+});
 
 export { todoModalViewModel } from "./todo-modal-view-model";
 export { todoViewModel } from "./todo-view-model";

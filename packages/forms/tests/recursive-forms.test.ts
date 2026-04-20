@@ -34,7 +34,7 @@ describe("recursive forms", () => {
     expect(form.replies.$count.getState()).toBe(1);
 
     const replyIds = form.replies.$ids.getState();
-    const reply = form.replies.instance(replyIds[0]!).getState();
+    const reply = form.replies.get(replyIds[0]!);
     expect(reply).not.toBeNull();
     expect(reply.author).toBeDefined();
     expect(reply.body).toBeDefined();
@@ -48,19 +48,19 @@ describe("recursive forms", () => {
     // Level 1
     form.replies.append({ author: "A", body: "Root reply" });
     const l1Ids = form.replies.$ids.getState();
-    const l1 = form.replies.instance(l1Ids[0]!).getState();
+    const l1 = form.replies.get(l1Ids[0]!);
 
     // Level 2
     l1.replies.append({ author: "B", body: "Nested reply" });
     const l2Ids = l1.replies.$ids.getState();
-    const l2 = l1.replies.instance(l2Ids[0]!).getState();
+    const l2 = l1.replies.get(l2Ids[0]!);
 
     // Level 3
     l2.replies.append({ author: "C", body: "Deep reply" });
     expect(l2.replies.$count.getState()).toBe(1);
 
     const l3Ids = l2.replies.$ids.getState();
-    const l3 = l2.replies.instance(l3Ids[0]!).getState();
+    const l3 = l2.replies.get(l3Ids[0]!);
     expect(l3).not.toBeNull();
     expect(l3.replies.kind).toBe("array");
     expect(l3.replies.$count.getState()).toBe(0);

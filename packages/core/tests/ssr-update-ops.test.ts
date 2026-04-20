@@ -42,9 +42,10 @@ describe("Phase 10 — many-ref additive updates against fork-hydrated data", ()
       .ref("items", "many")
       .pk("id");
     const itemModel = createModel({ contract: itemContract, name: "p10-add-item" });
-    const listModel = createModel({ contract: listContract, name: "p10-add-list" });
-    listModel.bind({ items: () => itemModel });
-
+    const listModel = createModel({ contract: listContract, name: "p10-add-list",
+    refs: { items: () => itemModel },
+  });
+   
     const serverScope = fork();
     await allSettled(itemModel.createManyFx, {
       scope: serverScope,
@@ -83,9 +84,10 @@ describe("Phase 10 — many-ref additive updates against fork-hydrated data", ()
       .ref("items", "many")
       .pk("id");
     const itemModel = createModel({ contract: itemContract, name: "p10-add-dup-item" });
-    const listModel = createModel({ contract: listContract, name: "p10-add-dup-list" });
-    listModel.bind({ items: () => itemModel });
-
+    const listModel = createModel({ contract: listContract, name: "p10-add-dup-list",
+    refs: { items: () => itemModel },
+  });
+   
     const serverScope = fork();
     await allSettled(itemModel.createManyFx, {
       scope: serverScope,
@@ -120,9 +122,10 @@ describe("Phase 10 — many-ref additive updates against fork-hydrated data", ()
       .ref("items", "many")
       .pk("id");
     const itemModel = createModel({ contract: itemContract, name: "p10-disc-item" });
-    const listModel = createModel({ contract: listContract, name: "p10-disc-list" });
-    listModel.bind({ items: () => itemModel });
-
+    const listModel = createModel({ contract: listContract, name: "p10-disc-list",
+    refs: { items: () => itemModel },
+  });
+   
     const serverScope = fork();
     await allSettled(itemModel.createManyFx, {
       scope: serverScope,
@@ -156,9 +159,10 @@ describe("Phase 10 — many-ref additive updates against fork-hydrated data", ()
       .ref("items", "many")
       .pk("id");
     const itemModel = createModel({ contract: itemContract, name: "p10-disc-add-item" });
-    const listModel = createModel({ contract: listContract, name: "p10-disc-add-list" });
-    listModel.bind({ items: () => itemModel });
-
+    const listModel = createModel({ contract: listContract, name: "p10-disc-add-list",
+    refs: { items: () => itemModel },
+  });
+   
     const serverScope = fork();
     await allSettled(itemModel.createManyFx, {
       scope: serverScope,
@@ -196,9 +200,10 @@ describe("Phase 10 — many-ref additive updates against fork-hydrated data", ()
       .ref("items", "many")
       .pk("id");
     const itemModel = createModel({ contract: itemContract, name: "p10-set-item" });
-    const listModel = createModel({ contract: listContract, name: "p10-set-list" });
-    listModel.bind({ items: () => itemModel });
-
+    const listModel = createModel({ contract: listContract, name: "p10-set-list",
+    refs: { items: () => itemModel },
+  });
+   
     const serverScope = fork();
     await allSettled(itemModel.createManyFx, {
       scope: serverScope,
@@ -232,9 +237,10 @@ describe("Phase 10 — many-ref additive updates against fork-hydrated data", ()
       .ref("items", "many")
       .pk("id");
     const itemModel = createModel({ contract: itemContract, name: "p10-plain-item" });
-    const listModel = createModel({ contract: listContract, name: "p10-plain-list" });
-    listModel.bind({ items: () => itemModel });
-
+    const listModel = createModel({ contract: listContract, name: "p10-plain-list",
+    refs: { items: () => itemModel },
+  });
+   
     const serverScope = fork();
     await allSettled(itemModel.createManyFx, {
       scope: serverScope,
@@ -275,9 +281,10 @@ describe("Phase 10 — one-ref updates against fork-hydrated data", () => {
       .ref("team", "one")
       .pk("id");
     const teamModel = createModel({ contract: teamContract, name: "p10-team" });
-    const playerModel = createModel({ contract: playerContract, name: "p10-player" });
-    playerModel.bind({ team: () => teamModel });
-
+    const playerModel = createModel({ contract: playerContract, name: "p10-player",
+    refs: { team: () => teamModel },
+  });
+   
     const serverScope = fork();
     await allSettled(teamModel.createManyFx, {
       scope: serverScope,
@@ -314,9 +321,10 @@ describe("Phase 10 — one-ref updates against fork-hydrated data", () => {
       .ref("team", "one")
       .pk("id");
     const teamModel = createModel({ contract: teamContract, name: "p10-disc-team" });
-    const playerModel = createModel({ contract: playerContract, name: "p10-disc-player" });
-    playerModel.bind({ team: () => teamModel });
-
+    const playerModel = createModel({ contract: playerContract, name: "p10-disc-player",
+    refs: { team: () => teamModel },
+  });
+   
     const serverScope = fork();
     await allSettled(teamModel.createFx, { scope: serverScope, params: { id: "t1" } });
     await allSettled(playerModel.createFx, {
@@ -403,9 +411,10 @@ describe("Phase 10 — scope isolation of update ops", () => {
       .ref("items", "many")
       .pk("id");
     const itemModel = createModel({ contract: itemContract, name: "p10-iso-item" });
-    const listModel = createModel({ contract: listContract, name: "p10-iso-list" });
-    listModel.bind({ items: () => itemModel });
-
+    const listModel = createModel({ contract: listContract, name: "p10-iso-list",
+    refs: { items: () => itemModel },
+  });
+   
     // Two independent server scopes with divergent initial state
     const serverA = fork();
     await allSettled(itemModel.createManyFx, {

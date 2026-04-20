@@ -1,4 +1,4 @@
-import { combine, type Store } from "effector";
+import type { Store } from "effector";
 import type { ModelInstanceId } from "./types";
 
 /**
@@ -37,29 +37,17 @@ export type InverseCardinality = "many" | "one";
  */
 export class InverseIndex {
   private readonly $byTarget: Store<ReadonlyMap<ModelInstanceId, ReadonlySet<ModelInstanceId>>>;
-  private readonly sourceDataMap: Store<Record<string, Record<string, unknown>>>;
-  private readonly getSourceInstanceScoped: (
-    id: ModelInstanceId,
-    dataMap: Record<string, Record<string, unknown>>,
-  ) => unknown;
   private readonly storeCache = new Map<ModelInstanceId, Store<ModelInstanceId[]>>();
-  private readonly resolvedCache = new Map<ModelInstanceId, Store<unknown[]>>();
 
   constructor(
     sourceDataMap: Store<Record<string, Record<string, unknown>>>,
     _modelName: string,
     private readonly refField: string,
     cardinality: InverseCardinality,
-    getSourceInstanceScoped: (
-      id: ModelInstanceId,
-      dataMap: Record<string, Record<string, unknown>>,
-    ) => unknown,
   ) {
     const field = this.refField;
     const isMany = cardinality === "many";
 
-    this.sourceDataMap = sourceDataMap;
-    this.getSourceInstanceScoped = getSourceInstanceScoped;
     this.$byTarget = sourceDataMap.map((dataMap) => buildByTarget(dataMap, field, isMany));
   }
 
@@ -81,35 +69,6 @@ export class InverseIndex {
   }
 
   /**
-   * Reactive list of resolved source instances for `targetId`. Filters out ids
-   * that have no instance in the current scope (e.g., dangling refs after a
-   * cascade delete).
-   *
-   * Uses `combine($forTarget, sourceDataMap)` so the scoped dataMap is
-   * available inside the derivation. The source-instance retentacler receives
-   * the scope-correct snapshot, so instances are materialised against the
-   * right data even in `fork({values})` hydrated scopes where the global
-   * cache is empty.
-   */
-  $resolvedForTarget(targetId: ModelInstanceId): Store<unknown[]> {
-    const cached = this.resolvedCache.get(targetId);
-    if (cached) return cached;
-
-    const $ids = this.$forTarget(targetId);
-    const getSourceInstanceScoped = this.getSourceInstanceScoped;
-    const store = combine(
-      $ids,
-      this.sourceDataMap,
-      (ids: ModelInstanceId[], dataMap: Record<string, Record<string, unknown>>) =>
-        ids
-          .map((id) => getSourceInstanceScoped(id, dataMap))
-          .filter((inst): inst is NonNullable<typeof inst> => inst != null),
-    );
-    this.resolvedCache.set(targetId, store);
-    return store;
-  }
-
-  /**
    * Drop the cached derived stores for a target. Called when a target instance
    * is deleted so future instances with the same id don't inherit a stale
    * `.map()` node. The underlying `$byTarget` state is not touched — it updates
@@ -117,7 +76,6 @@ export class InverseIndex {
    */
   clearTarget(targetId: ModelInstanceId): void {
     this.storeCache.delete(targetId);
-    this.resolvedCache.delete(targetId);
   }
 }
 

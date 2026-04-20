@@ -106,15 +106,20 @@ watchEffect(() => console.log(selected.value?.$title.getState()));
 | 4 | `Ref<Instance \| null>` |
 | 5 | `Ref<Instance \| null>` |
 
-Reactive variants wrap the underlying `Store<Instance | null>` using `effector-vue/composition`, so Vue templates auto-unwrap: `{{ todo.$title }}` works without `.value`.
+Reactive variants subscribe to `model.$idSet` (and the reactive id store where applicable) via `effector-vue/composition` and resolve the proxy synchronously via `model.get(id)`. Vue templates auto-unwrap: `{{ todo.$title }}` works without `.value`.
 
 ## `ModelLike<Instance>`
 
 ```ts
 interface ModelLike<Instance> {
-  name: string;
-  instance: (idOrKey: ModelInstanceId | ModelInstanceId[] | Store<ModelInstanceId | null>)
-    => Store<Instance | null>;
+  readonly name: string;
+  readonly $ids: Store<ModelInstanceId[]>;
+  readonly $idSet: Store<Set<ModelInstanceId>>;
+  get(id: ModelInstanceId): Instance | null;
+  get(...parts: [string | number, string | number, ...(string | number)[]]): Instance | null;
+  getSync(id: ModelInstanceId): Instance | undefined;
+  getByKeySync(...parts: [string | number, string | number, ...(string | number)[]]): Instance | undefined;
+  getRefMeta(field: string): { cardinality: "one" | "many"; target: unknown } | undefined;
 }
 ```
 

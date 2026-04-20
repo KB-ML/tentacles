@@ -37,7 +37,7 @@ features:
     details: "Deterministic SIDs enable serialize/fork hydration out of the box. Scope-isolated creation with zero state leaks between concurrent requests."
   - title: Zero Boilerplate
     icon: "\U000026A1"
-    details: "No manual createStore/createEvent. No ID management. No serialization config. Built-in $ids, $count, $instances, createFx, deleteFx, updateFx."
+    details: "No manual createStore/createEvent. No ID management. No serialization config. Built-in $ids, $count, instances(), createFx, deleteFx, updateFx."
 ---
 
 <div class="badge-row">

@@ -80,7 +80,7 @@ The thunk is evaluated lazily on first materialization, which breaks the cycle a
 
 ## Array forms with `.array()`
 
-`.array(name, rowContract, opts?)` declares a repeating section. Each row is a `FormRowShape<Row>` — a `FormShape` with an extra `key`, `index`, `arrayRef`, and `remove` event. The array itself is backed by a `@kbml-tentacles/core` Model, so `$ids`, `$instances`, `instance(id)`, and `query()` are available at runtime.
+`.array(name, rowContract, opts?)` declares a repeating section. Each row is a `FormRowShape<Row>` — a `FormShape` with an extra `key`, `index`, `arrayRef`, and `remove` event. The array itself is backed by a `@kbml-tentacles/core` Model, so `$ids`, `get(id)`, `instances()`, and `query()` are available at runtime.
 
 ```ts
 const ContactContract = createFormContract()

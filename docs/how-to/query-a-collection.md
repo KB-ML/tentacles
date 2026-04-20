@@ -12,7 +12,7 @@
 | `$groups` | `Store<Map<K, Row[]>>` | From `.groupBy(field)` — plain rows per bucket |
 | `$values` | `Store<T[]>` | From `.field(name)` |
 
-`$list` emits **plain rows** (field snapshots only). For reactive per-row access — stores, events, refs — use `$ids` to drive rendering and call `Model.instance(id)` per row. PK fields are included in each row, so you can call `Model.instance({ pk: row.pk })` directly.
+`$list` emits **plain rows** (field snapshots only). For reactive per-row access — stores, events, refs — use `$ids` to drive rendering and call `Model.get(id)` per row. PK fields are included in each row, so you can call `Model.get({ pk: row.pk })` directly.
 
 All operators accept `T | Store<T>`. Pass a literal for static queries or a `Store` to make the clause reactive to external state changes.
 
@@ -171,7 +171,7 @@ const $sortDir   = createStore<"asc" | "desc">("asc")
 userModel.query().orderBy($sortField, $sortDir)
 ```
 
-Under the hood, the sort stage skips re-sorting when a field that is not part of the sort changes (tracked via an internal `$lastField` store). Updating a non-sort field (`email`, say) does not trigger a full re-sort.
+The sort stage skips re-sorting when a field that is not part of the sort changes. Updating a non-sort field (`email`, say) does not trigger a full re-sort.
 
 ## Pagination
 
@@ -280,7 +280,7 @@ A final note on performance. When an instance's field changes (e.g. `user.$role.
 
 1. An internal `$fieldUpdated` event fires with `{ id, field, value }`.
 2. The filter stage uses an incremental sample that checks only the changed instance — O(1) instead of O(N).
-3. The sort stage skips re-sorting when the changed field is not a sort field (tracked via an internal `$lastField` store).
+3. The sort stage skips re-sorting when the changed field is not a sort field.
 4. `$list` dedups by reference equality — a field change on a row outside the current page returns the same row array, so rendering is skipped entirely.
 
 Structural changes — adding or removing ids, operand store updates — still force a full re-scan of the filter stage, but that is inherent to the change, not a library cost.

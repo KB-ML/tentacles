@@ -407,9 +407,9 @@ describe("COLLECTION QUERY: field", () => {
     const over30 = model.query().where("age", gt(30));
     over30.field("score").update(0);
 
-    const inst1 = model.instance("1").getState();
-    const inst2 = model.instance("2").getState();
-    const inst3 = model.instance("3").getState();
+    const inst1 = model.get("1");
+    const inst2 = model.get("2");
+    const inst3 = model.get("3");
     expect(inst1?.$score.getState()).toBe(10); // not matched
     expect(inst2?.$score.getState()).toBe(0);
     expect(inst3?.$score.getState()).toBe(0);
@@ -425,7 +425,7 @@ describe("COLLECTION QUERY: field", () => {
     over30.field("score").updated.watch((payload) => updates.push(payload));
 
     // Update matching instance
-    const inst2 = model.instance("2").getState()!;
+    const inst2 = model.get("2")!;
     inst2.$score.set(99);
 
     expect(updates).toHaveLength(1);
@@ -444,8 +444,8 @@ describe("COLLECTION QUERY: update / delete", () => {
     const over30 = model.query().where("age", gt(30));
     over30.update({ score: 0 });
 
-    expect(model.instance("1").getState()?.$score.getState()).toBe(10);
-    expect(model.instance("2").getState()?.$score.getState()).toBe(0);
+    expect(model.get("1")?.$score.getState()).toBe(10);
+    expect(model.get("2")?.$score.getState()).toBe(0);
   });
 
   it("query.delete removes matching instances", () => {
@@ -458,7 +458,7 @@ describe("COLLECTION QUERY: update / delete", () => {
     over30.delete();
 
     expect(model.$count.getState()).toBe(1);
-    expect(model.instance("1").getState()?.$name.getState()).toBe("A");
+    expect(model.get("1")?.$name.getState()).toBe("A");
   });
 });
 
@@ -497,7 +497,7 @@ describe("COLLECTION QUERY: reactivity", () => {
     expect(over30.$count.getState()).toBe(1);
 
     // Change age from 29 to 31 — should now match
-    model.instance("1").getState()!.$age.set(31);
+    model.get("1")!.$age.set(31);
     expect(over30.$count.getState()).toBe(2);
   });
 
@@ -509,7 +509,7 @@ describe("COLLECTION QUERY: reactivity", () => {
     const sorted = model.query().orderBy("score", "asc");
     expect(sorted.field("name").$values.getState()).toEqual(["B", "A"]);
 
-    model.instance("2").getState()!.$score.set(10);
+    model.get("2")!.$score.set(10);
     expect(sorted.field("name").$values.getState()).toEqual(["A", "B"]);
   });
 });

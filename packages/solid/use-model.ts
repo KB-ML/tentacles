@@ -2,7 +2,7 @@ import { ViewModelDefinition } from "@kbml-tentacles/core";
 import { is, type Store } from "effector";
 import { useUnit } from "effector-solid";
 import { type Accessor, createMemo, useContext } from "solid-js";
-import { getModelContext, getViewContext } from "./each";
+import { getModelContext, getViewContext, useProvidedScope } from "./each";
 import type { ModelInstanceId, ModelLike } from "./types";
 
 // ═══ VM branch ═══
@@ -31,14 +31,29 @@ function useModelById<Instance>(
   model: ModelLike<Instance>,
   id: ModelInstanceId,
 ): Accessor<Instance | null> {
-  return useUnit(model.instance(id)) as Accessor<Instance | null>;
+  const present = useUnit(model.has(id));
+  const scope = useProvidedScope();
+  return createMemo(() => {
+    if (!present()) return null;
+    return scope
+      ? ((model.getSync(id, scope) as Instance | undefined) ?? null)
+      : ((model.get(id) as Instance) ?? null);
+  });
 }
 
 function useModelByKey<Instance>(
   model: ModelLike<Instance>,
   ...parts: [string | number, string | number, ...(string | number)[]]
 ): Accessor<Instance | null> {
-  return useUnit(model.instance(...parts)) as Accessor<Instance | null>;
+  const serialized = parts.map(String).join("\x00");
+  const present = useUnit(model.has(serialized));
+  const scope = useProvidedScope();
+  return createMemo(() => {
+    if (!present()) return null;
+    return scope
+      ? ((model.getByKeySync(...parts, scope) as Instance | undefined) ?? null)
+      : ((model.get(...parts) as Instance) ?? null);
+  });
 }
 
 function useModelReactive<Instance>(
@@ -46,10 +61,17 @@ function useModelReactive<Instance>(
   $id: Store<ModelInstanceId | null>,
 ): Accessor<Instance | null> {
   const idAccessor = useUnit($id);
+  // Subscribe to $ids (emits only on structural changes, not field mutations).
+  const idsAccessor = useUnit(model.$ids);
+  const scope = useProvidedScope();
   return createMemo(() => {
     const id = idAccessor() as ModelInstanceId | null;
     if (id == null) return null;
-    return (model.getSync(id) as Instance) ?? null;
+    const ids = idsAccessor() as ModelInstanceId[];
+    if (!ids.includes(id) && !ids.includes(String(id))) return null;
+    return scope
+      ? ((model.getSync(id, scope) as Instance | undefined) ?? null)
+      : ((model.get(id) as Instance) ?? null);
   });
 }
 

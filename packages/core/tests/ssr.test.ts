@@ -470,7 +470,7 @@ describe("CRUSH: serialization edge cases", () => {
     model.create({ id: "sid-check", count: 0 });
 
     const scope = fork();
-    await allSettled(model.instance("sid-check").getState()!.increment, { scope });
+    await allSettled(model.get("sid-check")!.increment, { scope });
 
     const values = serialize(scope);
     const keys = Object.keys(values);

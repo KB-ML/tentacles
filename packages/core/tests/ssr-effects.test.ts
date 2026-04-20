@@ -133,7 +133,7 @@ describe("SSR effects: updateFx", () => {
     expect(clientScope.getState(model.$ids).map(String)).toEqual(["1"]);
     // The scope's instance store reflects the new field values via field proxies
     // that read from the SCOPED $dataMap. We use scope.getState on the field stores.
-    const inst = clientScope.getState(model.instance("1"));
+    const inst = model.getSync("1", clientScope);
     expect(inst).not.toBeNull();
     expect(clientScope.getState(inst!.$title)).toBe("Updated");
     expect(clientScope.getState(inst!.$done)).toBe(true);
@@ -149,8 +149,8 @@ describe("SSR effects: updateFx", () => {
       params: { id: "1", data: { done: true } },
     });
 
-    const instA = scopeA.getState(model.instance("1"));
-    const instB = scopeB.getState(model.instance("1"));
+    const instA = model.getSync("1", scopeA);
+    const instB = model.getSync("1", scopeB);
     expect(instA).not.toBeNull();
     expect(instB).not.toBeNull();
     expect(scopeA.getState(instA!.$done)).toBe(true);

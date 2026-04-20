@@ -145,37 +145,6 @@ describe("Phase 6 — getByKeySync with compound PK + scope", () => {
   });
 });
 
-describe("Phase 6 — byPartialKey with scoped hydrated data", () => {
-  it("matches compound-PK prefix against fork-hydrated data", async () => {
-    const contract = createContract()
-      .store("tenant", (s) => s<string>())
-      .store("id", (s) => s<string>())
-      .store("name", (s) => s<string>())
-      .pk("tenant", "id");
-    const model = createModel({ contract, name: "p6-partial-1" });
-
-    const serverScope = fork();
-    await allSettled(model.createManyFx, {
-      scope: serverScope,
-      params: [
-        { tenant: "acme", id: "u1", name: "Alice" },
-        { tenant: "acme", id: "u2", name: "Bob" },
-        { tenant: "zeta", id: "u3", name: "Carol" },
-      ],
-    });
-    const clientScope = fork({ values: serialize(serverScope) });
-    wipeGlobalCache(model);
-
-    const acmeStore = model.byPartialKey("acme");
-    const acmeRows = clientScope.getState(acmeStore);
-    const acmeIds = acmeRows.map((r) => String(r.__id)).sort();
-    expect(acmeIds).toEqual(["acme\0u1", "acme\0u2"]);
-
-    const zetaRows = clientScope.getState(model.byPartialKey("zeta"));
-    expect(zetaRows.map((r) => String(r.__id))).toEqual(["zeta\0u3"]);
-  });
-});
-
 describe("Phase 6 — scoped updateFx ref ops over SSR-hydrated data", () => {
   it("{ connect: id } on ref.one updates scoped $dataMap without global cache", async () => {
     const teamContract = createContract()
@@ -188,9 +157,10 @@ describe("Phase 6 — scoped updateFx ref ops over SSR-hydrated data", () => {
       .ref("team", "one")
       .pk("id");
     const teamModel = createModel({ contract: teamContract, name: "p6-ref-team" });
-    const playerModel = createModel({ contract: playerContract, name: "p6-ref-player" });
-    playerModel.bind({ team: () => teamModel });
-
+    const playerModel = createModel({ contract: playerContract, name: "p6-ref-player",
+    refs: { team: () => teamModel },
+  });
+   
     const serverScope = fork();
     await allSettled(teamModel.createManyFx, {
       scope: serverScope,
@@ -233,9 +203,10 @@ describe("Phase 6 — scoped updateFx ref ops over SSR-hydrated data", () => {
       .ref("team", "one")
       .pk("id");
     const teamModel = createModel({ contract: teamContract, name: "p6-disconnect-team" });
-    const playerModel = createModel({ contract: playerContract, name: "p6-disconnect-player" });
-    playerModel.bind({ team: () => teamModel });
-
+    const playerModel = createModel({ contract: playerContract, name: "p6-disconnect-player",
+    refs: { team: () => teamModel },
+  });
+   
     const serverScope = fork();
     await allSettled(teamModel.createFx, { scope: serverScope, params: { id: "t1", name: "Red" } });
     await allSettled(playerModel.createFx, {
@@ -272,9 +243,10 @@ describe("Phase 6 — scoped updateFx ref ops over SSR-hydrated data", () => {
       .ref("team", "one")
       .pk("id");
     const teamModel = createModel({ contract: teamContract, name: "p6-mixed-team" });
-    const playerModel = createModel({ contract: playerContract, name: "p6-mixed-player" });
-    playerModel.bind({ team: () => teamModel });
-
+    const playerModel = createModel({ contract: playerContract, name: "p6-mixed-player",
+    refs: { team: () => teamModel },
+  });
+   
     const serverScope = fork();
     await allSettled(teamModel.createManyFx, {
       scope: serverScope,

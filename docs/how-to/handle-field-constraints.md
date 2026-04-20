@@ -92,7 +92,7 @@ userModel.create({ id: 2, email: "a@example.com", name: "Anna" })
 // throws TentaclesError: "email" already exists: a@example.com
 ```
 
-Unique fields also enable fast reverse lookups. Use `Model.byPartialKey(value)` to find an instance by a unique field (O(1) hash lookup instead of O(N) scan).
+Unique fields feed the collection-query index — `model.query().where("email", eq("a@example.com"))` is an O(1) hash lookup instead of an O(N) scan.
 
 Uniqueness is enforced per model — every instance uses the same underlying `$dataMap` and `ModelIndexes`. Deleting an instance frees its unique keys so the same value can be reused.
 

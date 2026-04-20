@@ -139,7 +139,7 @@ function tentaclesWarn(message: string): void
 Internal counterpart to `TentaclesError` — writes a formatted warning to `console.warn` with the `[tentacles/core]:` prefix. Not part of the public API, but useful to know about because library-emitted warnings in the console originate here.
 
 ```
-[tentacles/core]: ref "posts" has no target bound — add .bind({ posts: () => PostModel })
+[tentacles/core]: ref "posts" has no target — pass `refs: { posts: () => postModel }` to createModel()
 ```
 
 Do not rely on this helper in user code; the library reserves the right to change, remove, or rename it between versions.

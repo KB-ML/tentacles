@@ -24,7 +24,7 @@ interface TodoInstance {
   rename:  EventCallable<string>
   author:  RefOneApi<UserInstance>
   $upper:  Store<string>            // derived → real Store
-  $posts:  Store<PostInstance[]>    // inverse → real Store
+  $posts:  Store<ModelInstanceId[]> // inverse → ids only; resolve via postModel.get(id)
 
   readonly "@@instanceId": string
   readonly "@@meta":       InstanceMeta
@@ -133,7 +133,7 @@ todo.$upper.getState() // "SHIPPING"
 
 ## Inverse fields (`$field`)
 
-`.inverse("posts", "author")` — no per-instance storage. `instance.$posts` is a derived `Store<PostInstance[]>` that reads the shared `InverseIndex.$byTarget` map. Mutating a post's `author` ref reactively updates every affected user's `$posts`.
+`.inverse("posts", "author")` — no per-instance storage. `instance.$posts` is a derived `Store<ModelInstanceId[]>` that reads the shared `InverseIndex.$byTarget` map. Resolve ids to instances with `postModel.get(id)`. Mutating a post's `author` ref reactively updates every affected user's `$posts`. The ids-not-instances shape avoids a cross-model type inference cycle (typing it as `Store<PostInstance[]>` would require `workflowModel` to know `typeof logModel` and vice-versa, which TypeScript cannot resolve).
 
 ## Metadata
 
@@ -185,7 +185,7 @@ A key distinction: a `$field` accessor is **not** a `StoreWritable<T>` — it is
 | `todo.$title.set(v)` | Uses shared model-level event, no materialisation. |
 | `todo.$title.on(e, fn)` | Uses `SharedOnRegistry`, no materialisation (for contract events). |
 
-For high-count collections — rendering a 10 000-row table — use `Model.$ids` + per-row `Model.instance(id)` and read field values through `.getState()` or bind them through the framework adapter, which avoids materialisation for fields that are only displayed. Reach for `combine` / `sample` only when you genuinely need cross-field reactivity outside the framework render path.
+For high-count collections — rendering a 10 000-row table — use `Model.$ids` + per-row `Model.get(id)` and read field values through `.getState()` or bind them through the framework adapter, which avoids materialisation for fields that are only displayed. Reach for `combine` / `sample` only when you genuinely need cross-field reactivity outside the framework render path.
 
 ## See also
 

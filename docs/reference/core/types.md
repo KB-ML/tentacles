@@ -100,9 +100,17 @@ Used at runtime to discriminate field descriptors. This is the only runtime expo
 
 ## Model layer
 
-### `ApplyBind<Contract, B>`
+### `ApplyRefs<Contract, R>` (alias: `ApplyBind<Contract, R>`)
 
-Given a contract record and a `.bind({ refName: () => Model })` config object, produces a new contract record whose `ContractRef` targets are replaced with the bound model types. Enables `Model<BoundContract>` inference after binding.
+Given a contract record and a `refs: { refName: () => Model }` config, produces a contract record where ref targets are substituted with the configured model types. Kept as an identity at the value level to avoid circular type inference across bidirectional relationships; the runtime still enforces ref/inverse target configuration.
+
+### `RefsConfig<Contract>`
+
+Strict per-field dictionary type used by `createModel`'s `refs` option. Keys are the names of `ref` and `inverse` fields on the contract; each value is `() => TargetModel`.
+
+### `BindableFieldNames<Contract>`
+
+Union of field names eligible for entries in `refs` — all `ref` and `inverse` fields declared on the contract.
 
 ### `CompoundKey`
 
@@ -160,7 +168,6 @@ Runtime shape for a `ref("x", "many")`:
   $ids: StoreWritable<ModelInstanceId[]>
   add: EventCallable<ModelInstanceId>
   remove: EventCallable<ModelInstanceId>
-  $resolved: Store<any[]>
 }
 ```
 
@@ -185,7 +192,6 @@ Runtime shape for a `ref("x", "one")`:
   $id: StoreWritable<ModelInstanceId | null>
   set: EventCallable<ModelInstanceId>
   clear: EventCallable<void>
-  $resolved: Store<any>
 }
 ```
 
@@ -217,7 +223,7 @@ Created by operator factories (`eq`, `gt`, `contains`, etc.) and consumed by `.w
 
 ### `QueryContext<Instance>`
 
-The context object a `CollectionQuery` receives from its owning model — exposes `$ids`, `$idSet`, `$instances`, `$dataMap`, `getInstance`, `getInstanceFromData`, `getUpdated`, `handleDelete`, `handleUpdate`, `getContract`, optional `$index`, and optional `$fieldUpdated`. Used internally to wire scope-aware reads during `fork({ values })`.
+The context object a `CollectionQuery` receives from its owning model — exposes `$ids`, `$idSet`, `$dataMap`, `getInstance`, `getInstanceFromData`, `getUpdated`, `handleDelete`, `handleUpdate`, `getContract`, optional `$index`, and optional `$fieldUpdated`. Used internally to wire scope-aware reads during `fork({ values })`.
 
 ### `Reactive<T>`
 

@@ -187,7 +187,7 @@ Scope a single instance into children context, by a literal ID value.
 </Each>
 ```
 
-Under the hood this calls `todoModel.instance(42)` once and keeps the subscription alive until unmount.
+Under the hood this subscribes to `todoModel.$idSet` for membership and calls `todoModel.get(42)` for the stable proxy.
 
 ### `id={Store<ID | null>}` (reactive)
 
@@ -278,7 +278,7 @@ const todo = useModel(todoModel, 42)
 if (!todo) return <p>Not found</p>
 ```
 
-Returns `Instance | null`. Subscribes to `todoModel.instance(42)` — the reference updates when the instance is recreated with the same ID.
+Returns `Instance | null`. Subscribes to `todoModel.$idSet` for membership and returns `todoModel.get(42)` for the proxy.
 
 ### Compound key
 

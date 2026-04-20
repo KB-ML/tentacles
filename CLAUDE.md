@@ -53,7 +53,7 @@ Contract utilities: `pick()`, `omit()`, `partial()`, `required()`, `merge()` —
 
 #### Model layer (`model/`)
 
-`createModel(contract)` → `Model` — persistent instance manager.
+`createModel({ contract, refs?, fn?, name? })` → `Model` — persistent instance manager. When the contract declares `ref`/`inverse` fields that resolve to other models, pass their targets via `refs: { fieldName: () => targetModel }`. Thunks enable circular/bidirectional references (`A.refs.b = () => B; B.refs.a = () => A`). Self-refs don't need an entry.
 
 Key internals:
 - **`$dataMap`** — single `StoreWritable<Record<id, Record>>`, the source of truth for all instance data. ONE store per model, shared by all instances.
@@ -62,10 +62,10 @@ Key internals:
 - **Model-level events** — ONE `createEvent` per contract event field, created in `createModel()`. Per-instance events are lazy prepends on these model events (prepend created on first call, not at creation).
 - **Lazy `$instanceSlice`** — standalone `createStore` per instance, only created when a field materializes (for `combine`/`sample`/`scope.getState` usage). Models with no materialized fields create ZERO per-instance stores.
 - **Lightweight instances** — models without fn, refs, computed, resetOn, or indexes skip `withRegion` entirely. The `region` field in the cache entry is `null`.
-- **`ModelRegistry`** — `$ids`, `$idSet` (O(1) membership), lazy `$instances`, `$pkeys`, `$count`. Memoized `.instance()` and `.byPartialKey()`.
+- **`ModelRegistry`** — reactive membership (`$ids`, `$idSet` O(1) membership, `$pkeys`, `$count`) plus sync instance access (`get(id)`, `instances()`). Instance proxies are stable — there is no `Store<Instance>` wrapper (no `$instances` / `.instance()` / `.byPartialKey()`). `get()` is a fast global-cache lookup that lazily reconstructs the proxy from `$dataMap` for ids hydrated via `fork({ values })`; the proxy itself is scope-independent because its `$field` stores read from the (scope-aware) `$dataMap`.
 - **`ModelIndexes`** — unique/indexed field constraints, `$version` bumps.
 - **`InverseIndex`** — imperative `Map<targetId, Set<sourceIds>>` with bump event for scoped reactivity.
-- **`RefApiFactory`** — creates `RefManyApi` (`$ids`, `add`, `remove`, `$resolved`) and `RefOneApi` (`$id`, `set`, `clear`, `$resolved`) per instance/field, backed by `$dataMap`.
+- **`RefApiFactory`** — creates `RefManyApi` (`$ids`, `add`, `remove`) and `RefOneApi` (`$id`, `set`, `clear`) per instance/field, backed by `$dataMap`. Callers resolve ids to instances via `targetModel.get(id)`.
 - **`PrimaryKeyResolver`** — PK extraction, FK remapping, nested ref data resolution (connect/create/connectOrCreate).
 - **`ModelEffects`** — `createFx`, `deleteFx`, `updateFx`, `created`, `deleted`, `cleared` events.
 - **`InstanceCache`** — `OrderedMap<ID, Entry>` (doubly-linked list, O(1) ops).
@@ -90,7 +90,7 @@ Chain: `.where(field, operator)` → `.when($condition, fn)` → `.orderBy(field
 
 Reactive outputs: `$filtered` → `$sorted` → `$list`, plus `$count`, `$totalCount`, `$ids`, `$first`.
 
-**Incremental query updates**: `$filtered` uses a full-scan `.map()` from `combine([$ids, $dataMap, ...operands])` for structural changes ($ids add/remove, operand changes). Field mutations trigger an incremental `sample` from `_dataMapFieldUpdated` that checks only the changed instance — O(1) instead of O(N). `$sorted` skips re-sort when the changed field is not a sort field (tracked via `$lastField` store).
+**Incremental query updates**: `$filtered` uses a full-scan `.map()` from `combine([$ids, $dataMap, ...operands])` for structural changes ($ids add/remove, operand changes). Field mutations trigger an incremental `sample` from `_dataMapFieldUpdated` that checks only the changed instance — O(1) instead of O(N). `$sorted` skips re-sort when the changed field is not a sort field (tracked via a `$sortFieldBump` counter that increments only when a sort field mutates).
 
 `QueryField` — `.field(name)` → `$values`, `.update(value)`, `.updated` event. Derived from `$ids` + `$dataMap` (avoids circular deps with `$list`).
 

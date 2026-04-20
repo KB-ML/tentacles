@@ -95,7 +95,7 @@ describe("Model.instance()", () => {
       fn: ({ $name }) => ({ $name }),
     });
     const inst = model.create({ id: "g1", name: "hello" });
-    const got = model.instance("g1").getState();
+    const got = model.get("g1");
     expect(got).toBe(inst);
     expect(got!.$name.getState()).toBe("hello");
   });
@@ -109,7 +109,7 @@ describe("Model.instance()", () => {
       contract,
       fn: ({ $name }) => ({ $name }),
     });
-    expect(model.instance("nope").getState()).toBeNull();
+    expect(model.get("nope")).toBeNull();
   });
 
   it("returns null after delete", () => {
@@ -123,7 +123,7 @@ describe("Model.instance()", () => {
     });
     model.create({ id: "d1", name: "x" });
     model.delete("d1");
-    expect(model.instance("d1").getState()).toBeNull();
+    expect(model.get("d1")).toBeNull();
   });
 });
 
@@ -152,7 +152,7 @@ describe("Instance meta: __id and __model", () => {
       fn: ({ $name }) => ({ $name }),
     });
     model.create({ id: "m2", name: "test" });
-    const got = model.instance("m2").getState()!;
+    const got = model.get("m2")!;
     expect(got.__id).toBe("m2");
     expect(got.__model).toBe(model);
   });
@@ -170,18 +170,18 @@ describe("Instance meta: __id and __model", () => {
     model.create({ id: "b", name: "Bob" });
 
     // __model is Model<any, any>, so we verify navigation works
-    const sibling = a.__model.instance("b").getState();
+    const sibling = a.__model.get("b");
     expect(sibling).not.toBeNull();
     expect(sibling!.__id).toBe("b");
 
     // Use typed model for full type safety
-    const typedSibling = model.instance("b").getState();
+    const typedSibling = model.get("b");
     expect(typedSibling!.$name.getState()).toBe("Bob");
   });
 });
 
-describe("$resolved: ref many", () => {
-  it("resolves referenced instances", () => {
+describe("ref many ($ids + manual resolve)", () => {
+  it("exposes referenced ids; caller resolves via model.instance()", () => {
     const targetModel = makeTargetModel();
     const contract = createContract()
       .store("id", (s) => s<string>())
@@ -191,8 +191,8 @@ describe("$resolved: ref many", () => {
     const model = createModel({
       contract,
       fn: ({ $title, items }) => ({ $title, items }),
+      refs: { items: () => targetModel },
     });
-    model.bind({ items: () => targetModel });
 
     targetModel.create({ id: "t1", name: "A" });
     targetModel.create({ id: "t2", name: "B" });
@@ -201,35 +201,17 @@ describe("$resolved: ref many", () => {
     inst.items.add("t1");
     inst.items.add("t2");
 
-    const resolved = inst.items.$resolved.getState();
+    const ids = inst.items.$ids.getState();
+    expect(ids).toEqual(["t1", "t2"]);
+    const resolved = ids
+      .map((id) => targetModel.get(id))
+      .filter((x): x is NonNullable<typeof x> => x != null);
     expect(resolved).toHaveLength(2);
-    expect(resolved[0].$name.getState()).toBe("A");
-    expect(resolved[1].$name.getState()).toBe("B");
+    expect(resolved[0]!.$name.getState()).toBe("A");
+    expect(resolved[1]!.$name.getState()).toBe("B");
   });
 
-  it("filters dangling refs", () => {
-    const targetModel = makeTargetModel();
-    const contract = createContract()
-      .store("id", (s) => s<string>())
-      .ref("items", "many")
-      .pk("id");
-    const model = createModel({
-      contract,
-      fn: ({ items }) => ({ items }),  // refs stay bare
-    });
-    model.bind({ items: () => targetModel });
-
-    targetModel.create({ id: "t1", name: "A" });
-    const inst = model.create({ id: "r1" });
-    inst.items.add("t1");
-    inst.items.add("t-missing");
-
-    const resolved = inst.items.$resolved.getState();
-    expect(resolved).toHaveLength(1);
-    expect(resolved[0].$name.getState()).toBe("A");
-  });
-
-  it("updates when target instance is deleted", () => {
+  it("dangling ids resolve to null (caller filters)", () => {
     const targetModel = makeTargetModel();
     const contract = createContract()
       .store("id", (s) => s<string>())
@@ -238,8 +220,34 @@ describe("$resolved: ref many", () => {
     const model = createModel({
       contract,
       fn: ({ items }) => ({ items }),
+      refs: { items: () => targetModel },
     });
-    model.bind({ items: () => targetModel });
+
+    targetModel.create({ id: "t1", name: "A" });
+    const inst = model.create({ id: "r1" });
+    inst.items.add("t1");
+    inst.items.add("t-missing");
+
+    const ids = inst.items.$ids.getState();
+    expect(ids).toEqual(["t1", "t-missing"]);
+    const resolved = ids
+      .map((id) => targetModel.get(id))
+      .filter((x): x is NonNullable<typeof x> => x != null);
+    expect(resolved).toHaveLength(1);
+    expect(resolved[0]!.$name.getState()).toBe("A");
+  });
+
+  it("$ids updates when target instance is deleted (cascade cleanup)", () => {
+    const targetModel = makeTargetModel();
+    const contract = createContract()
+      .store("id", (s) => s<string>())
+      .ref("items", "many")
+      .pk("id");
+    const model = createModel({
+      contract,
+      fn: ({ items }) => ({ items }),
+      refs: { items: () => targetModel },
+    });
 
     targetModel.create({ id: "t1", name: "A" });
     targetModel.create({ id: "t2", name: "B" });
@@ -247,16 +255,20 @@ describe("$resolved: ref many", () => {
     inst.items.add("t1");
     inst.items.add("t2");
 
-    expect(inst.items.$resolved.getState()).toHaveLength(2);
+    expect(inst.items.$ids.getState()).toEqual(["t1", "t2"]);
 
     targetModel.delete("t1");
 
-    const resolved = inst.items.$resolved.getState();
+    const ids = inst.items.$ids.getState();
+    expect(ids).toEqual(["t2"]);
+    const resolved = ids
+      .map((id) => targetModel.get(id))
+      .filter((x): x is NonNullable<typeof x> => x != null);
     expect(resolved).toHaveLength(1);
-    expect(resolved[0].$name.getState()).toBe("B");
+    expect(resolved[0]!.$name.getState()).toBe("B");
   });
 
-  it("resolved instances have __id", () => {
+  it("resolved instances via model.instance() carry __id", () => {
     const targetModel = makeTargetModel();
     const contract = createContract()
       .store("id", (s) => s<string>())
@@ -265,20 +277,21 @@ describe("$resolved: ref many", () => {
     const model = createModel({
       contract,
       fn: ({ items }) => ({ items }),
+      refs: { items: () => targetModel },
     });
-    model.bind({ items: () => targetModel });
 
     targetModel.create({ id: "t1", name: "A" });
     const inst = model.create({ id: "r1" });
     inst.items.add("t1");
 
-    const resolved = inst.items.$resolved.getState();
-    expect(resolved[0].__id).toBe("t1");
+    const [id] = inst.items.$ids.getState();
+    const resolved = targetModel.get(id!);
+    expect(resolved!.__id).toBe("t1");
   });
 });
 
-describe("$resolved: ref one", () => {
-  it("resolves single reference", () => {
+describe("ref one ($id + manual resolve)", () => {
+  it("exposes single referenced id; caller resolves via model.instance()", () => {
     const targetModel = makeTargetModel();
     const contract = createContract()
       .store("id", (s) => s<string>())
@@ -287,20 +300,22 @@ describe("$resolved: ref one", () => {
     const model = createModel({
       contract,
       fn: ({ current }) => ({ current }),
+      refs: { current: () => targetModel },
     });
-    model.bind({ current: () => targetModel });
 
     targetModel.create({ id: "t1", name: "A" });
     const inst = model.create({ id: "r1" });
     inst.current.set("t1");
 
-    const resolved = inst.current.$resolved.getState();
+    const id = inst.current.$id.getState();
+    expect(id).toBe("t1");
+    const resolved = targetModel.get(id!);
     expect(resolved).not.toBeNull();
-    expect(resolved.$name.getState()).toBe("A");
-    expect(resolved.__id).toBe("t1");
+    expect(resolved!.$name.getState()).toBe("A");
+    expect(resolved!.__id).toBe("t1");
   });
 
-  it("returns null when unset", () => {
+  it("$id is null when unset", () => {
     const targetModel = makeTargetModel();
     const contract = createContract()
       .store("id", (s) => s<string>())
@@ -309,14 +324,14 @@ describe("$resolved: ref one", () => {
     const model = createModel({
       contract,
       fn: ({ current }) => ({ current }),
+      refs: { current: () => targetModel },
     });
-    model.bind({ current: () => targetModel });
 
     const inst = model.create({ id: "r1" });
-    expect(inst.current.$resolved.getState()).toBeNull();
+    expect(inst.current.$id.getState()).toBeNull();
   });
 
-  it("returns null for dangling ref", () => {
+  it("dangling $id resolves to null via model.instance()", () => {
     const targetModel = makeTargetModel();
     const contract = createContract()
       .store("id", (s) => s<string>())
@@ -325,15 +340,17 @@ describe("$resolved: ref one", () => {
     const model = createModel({
       contract,
       fn: ({ current }) => ({ current }),
+      refs: { current: () => targetModel },
     });
-    model.bind({ current: () => targetModel });
 
     const inst = model.create({ id: "r1" });
     inst.current.set("nonexistent");
-    expect(inst.current.$resolved.getState()).toBeNull();
+    const id = inst.current.$id.getState();
+    expect(id).toBe("nonexistent");
+    expect(targetModel.get(id!)).toBeNull();
   });
 
-  it("updates when target is deleted", () => {
+  it("$id is nulled when target is deleted", () => {
     const targetModel = makeTargetModel();
     const contract = createContract()
       .store("id", (s) => s<string>())
@@ -342,20 +359,20 @@ describe("$resolved: ref one", () => {
     const model = createModel({
       contract,
       fn: ({ current }) => ({ current }),
+      refs: { current: () => targetModel },
     });
-    model.bind({ current: () => targetModel });
 
     targetModel.create({ id: "t1", name: "A" });
     const inst = model.create({ id: "r1" });
     inst.current.set("t1");
 
-    expect(inst.current.$resolved.getState()).not.toBeNull();
+    expect(inst.current.$id.getState()).toBe("t1");
 
     targetModel.delete("t1");
-    expect(inst.current.$resolved.getState()).toBeNull();
+    expect(inst.current.$id.getState()).toBeNull();
   });
 
-  it("updates on clear", () => {
+  it("$id is null after clear()", () => {
     const targetModel = makeTargetModel();
     const contract = createContract()
       .store("id", (s) => s<string>())
@@ -364,19 +381,19 @@ describe("$resolved: ref one", () => {
     const model = createModel({
       contract,
       fn: ({ current }) => ({ current }),
+      refs: { current: () => targetModel },
     });
-    model.bind({ current: () => targetModel });
 
     targetModel.create({ id: "t1", name: "A" });
     const inst = model.create({ id: "r1" });
     inst.current.set("t1");
     inst.current.clear();
 
-    expect(inst.current.$resolved.getState()).toBeNull();
+    expect(inst.current.$id.getState()).toBeNull();
   });
 });
 
-describe("$resolved: self-ref", () => {
+describe("self-ref ($ids/$id + manual resolve)", () => {
   it("self-ref many resolves through owning model", () => {
     const contract = createContract()
       .store("id", (s) => s<string>())
@@ -392,10 +409,14 @@ describe("$resolved: self-ref", () => {
     model.create({ id: "c2", text: "Reply" });
     root.replies.add("c2");
 
-    const resolved = root.replies.$resolved.getState();
+    const ids = root.replies.$ids.getState();
+    expect(ids).toEqual(["c2"]);
+    const resolved = ids
+      .map((id) => model.get(id))
+      .filter((x): x is NonNullable<typeof x> => x != null);
     expect(resolved).toHaveLength(1);
-    expect(resolved[0].$text.getState()).toBe("Reply");
-    expect(resolved[0].__id).toBe("c2");
+    expect(resolved[0]!.$text.getState()).toBe("Reply");
+    expect(resolved[0]!.__id).toBe("c2");
   });
 
   it("self-ref one resolves through owning model", () => {
@@ -409,13 +430,15 @@ describe("$resolved: self-ref", () => {
       fn: ({ $name, parent }) => ({ $name, parent }),
     });
 
-    const root = model.create({ id: "p1", name: "Root" });
+    model.create({ id: "p1", name: "Root" });
     const child = model.create({ id: "p2", name: "Child" });
     child.parent.set("p1");
 
-    const resolved = child.parent.$resolved.getState();
+    const id = child.parent.$id.getState();
+    expect(id).toBe("p1");
+    const resolved = model.get(id!);
     expect(resolved).not.toBeNull();
-    expect(resolved.$name.getState()).toBe("Root");
+    expect(resolved!.$name.getState()).toBe("Root");
   });
 
   it("self-ref tree: nested resolution", () => {
@@ -431,17 +454,20 @@ describe("$resolved: self-ref", () => {
 
     const root = model.create({ id: "root", name: "Root" });
     const a = model.create({ id: "a", name: "A" });
-    const b = model.create({ id: "b", name: "B" });
+    model.create({ id: "b", name: "B" });
 
     root.children.add("a");
     root.children.add("b");
     a.children.add("b");
 
-    const rootChildren = root.children.$resolved.getState();
-    expect(rootChildren).toHaveLength(2);
+    const rootChildIds = root.children.$ids.getState();
+    expect(rootChildIds).toEqual(["a", "b"]);
 
-    const aChildren = a.children.$resolved.getState();
-    expect(aChildren).toHaveLength(1);
-    expect(aChildren[0].__id).toBe("b");
+    const aChildIds = a.children.$ids.getState();
+    expect(aChildIds).toEqual(["b"]);
+    const resolved = aChildIds
+      .map((id) => model.get(id))
+      .filter((x): x is NonNullable<typeof x> => x != null);
+    expect(resolved[0]!.__id).toBe("b");
   });
 });

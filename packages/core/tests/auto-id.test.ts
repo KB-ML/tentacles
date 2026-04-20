@@ -258,7 +258,7 @@ describe("Autoincrement: basic", () => {
     expect(model.$count.getState()).toBe(2);
     expect(model.$ids.getState()).toEqual(["1", "2"]);
 
-    const inst = model.instance("1").getState();
+    const inst = model.get("1");
     expect(inst).not.toBeNull();
     expect(inst!.$name.getState()).toBe("Alice");
   });
@@ -359,7 +359,7 @@ describe("SSR: autoincrement", () => {
     expect(dataMap["1"]?.id).toBe(1);
 
     const clientScope = fork({ values });
-    const inst = model.instance("1").getState();
+    const inst = model.get("1");
     expect(inst).not.toBeNull();
     expect(clientScope.getState(inst!.$name)).toBe("Alice");
     expect(clientScope.getState(inst!.$id)).toBe(1);

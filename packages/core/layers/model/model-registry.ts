@@ -1,11 +1,4 @@
-import {
-  combine,
-  createEvent,
-  createStore,
-  type EventCallable,
-  type Store,
-  type StoreWritable,
-} from "effector";
+import { createEvent, createStore, type EventCallable, type Store } from "effector";
 import { type CompoundKey, InstanceCache } from "./instance-cache";
 import type { ModelInstanceId } from "./types";
 
@@ -18,41 +11,30 @@ export class ModelRegistry<Instance> {
   public readonly clear: EventCallable<void>;
   public readonly reorder: EventCallable<ModelInstanceId[]>;
 
-  /** O(1) membership check derived from $ids. Used internally by instance() and query layer. */
+  /** O(1) membership check derived from $ids. */
   public readonly $idSet: Store<Set<ModelInstanceId>>;
 
   private _$pkeys?: Store<CompoundKey[]>;
   private _$count?: Store<number>;
-  private _$instances?: Store<Instance[]>;
-  private readonly _instanceStores = new Map<string, Store<Instance | null>>();
-  private readonly _partialKeyStores = new Map<string, Store<Instance[]>>();
+  private readonly _hasStores = new Map<string, Store<boolean>>();
 
   private readonly getCompoundKey: (id: string) => CompoundKey | undefined;
   private readonly getInstance: (id: ModelInstanceId) => Instance | undefined;
   /**
-   * Scope-aware getInstance: receives $dataMap snapshot so reconstruction
-   * can read scoped data (e.g. after fork({ values }) on the client).
+   * Reconstructs from the global `$dataMap` if needed. Used by the sync
+   * `.get()` / `.instances()` APIs.
    */
-  private readonly getInstanceScoped: (
-    id: ModelInstanceId,
-    dataMap: Record<string, Record<string, unknown>>,
-  ) => Instance | undefined;
-  private readonly getDataMap: () => StoreWritable<Record<string, Record<string, unknown>>>;
+  private readonly getInstanceOrReconstruct: (id: ModelInstanceId) => Instance | undefined;
 
   constructor(
     modelName: string,
     getCompoundKey: (id: string) => CompoundKey | undefined,
     getInstance: (id: ModelInstanceId) => Instance | undefined,
-    getDataMap: () => StoreWritable<Record<string, Record<string, unknown>>>,
-    getInstanceScoped: (
-      id: ModelInstanceId,
-      dataMap: Record<string, Record<string, unknown>>,
-    ) => Instance | undefined,
+    getInstanceOrReconstruct: (id: ModelInstanceId) => Instance | undefined,
   ) {
     this.getCompoundKey = getCompoundKey;
     this.getInstance = getInstance;
-    this.getInstanceScoped = getInstanceScoped;
-    this.getDataMap = getDataMap;
+    this.getInstanceOrReconstruct = getInstanceOrReconstruct;
 
     this.add = createEvent<ModelInstanceId>();
     this.addMany = createEvent<ModelInstanceId[]>();
@@ -88,20 +70,8 @@ export class ModelRegistry<Instance> {
       .on(this.clear, () => [])
       .on(this.reorder, (_, newOrder) => newOrder);
 
-    // O(1) Set derived from $ids — used for fast membership checks in instance()
-    // and query-field updated filters. Avoids O(N) Array.includes() in hot paths.
-    // Kept as derived store (not primary) for SSR correctness: fork({ values })
-    // hydrates $ids, and $idSet must recompute from the hydrated $ids automatically.
+    // O(1) Set derived from $ids — used for fast membership checks.
     this.$idSet = this.$ids.map((ids) => new Set(ids));
-
-    // Clean up memoized lookup stores when instances are removed or cleared
-    this.removed.watch((id) => {
-      this._instanceStores.delete(String(id));
-    });
-    this.clear.watch(() => {
-      this._instanceStores.clear();
-      this._partialKeyStores.clear();
-    });
   }
 
   get $pkeys(): Store<CompoundKey[]> {
@@ -122,95 +92,119 @@ export class ModelRegistry<Instance> {
     return this._$count;
   }
 
-  get $instances(): Store<Instance[]> {
-    if (!this._$instances) {
-      // combine with $dataMap so reconstruction can read scoped data
-      // (e.g. after fork({ values }) on the client where global $dataMap is empty).
-      // Stable reference: avoid re-renders when instances haven't changed.
-      let prev: Instance[] = [];
-      this._$instances = combine(this.$ids, this.getDataMap(), (ids, dataMap) => {
-        const result = ids
-          .map((id) => this.getInstanceScoped(id, dataMap))
-          .filter(Boolean) as Instance[];
-        if (result.length === prev.length && result.every((inst, i) => inst === prev[i])) {
-          return prev;
-        }
-        prev = result;
-        return result;
-      });
-    }
-    return this._$instances;
+  /**
+   * Returns a memoized scalar boolean store: `true` if `id` is in `$ids`.
+   *
+   * Because effector's default equality suppresses duplicate emissions for
+   * primitive values, consumers subscribed via `useUnit(model.has(id))`
+   * re-render only when membership actually flips — NOT when unrelated ids
+   * or fields change (which is the problem with `$idSet`, whose `.map` emits
+   * a fresh `Set` reference on every upstream emission).
+   *
+   * **Laziness.** The returned value is a Store-shaped proxy — the underlying
+   * `$ids.map(...)` effector node is NOT created until a store member is
+   * actually accessed (`.graphite`, `.watch`, `.subscribe`, `.map`,
+   * `.getState`, `.updates`, etc.). Mirrors the lazy pattern used by
+   * `createFieldProxy` in `field-proxy.ts`.
+   *
+   * The cache is unbounded for the model's lifetime — each entry is a single
+   * proxy (and at most one underlying `.map` store) tied to a specific id.
+   * Rule #6 (no `watch`) forbids a clear-time cleanup watcher; the leak is
+   * negligible in practice.
+   */
+  has(id: ModelInstanceId): Store<boolean> {
+    const key = String(id);
+    const cached = this._hasStores.get(key);
+    if (cached) return cached;
+    const ids$ = this.$ids;
+    let inner: Store<boolean> | null = null;
+    const ensure = (): Store<boolean> => {
+      if (!inner) inner = ids$.map((ids) => ids.includes(key));
+      return inner;
+    };
+    const proxy = {
+      kind: "store" as const,
+      get sid() {
+        return ensure().sid;
+      },
+      get shortName() {
+        return ensure().shortName;
+      },
+      get compositeName() {
+        return ensure().compositeName;
+      },
+      get graphite() {
+        return (ensure() as unknown as { graphite: unknown }).graphite;
+      },
+      get stateRef() {
+        return (ensure() as unknown as { stateRef: unknown }).stateRef;
+      },
+      get updates() {
+        return ensure().updates;
+      },
+      get defaultState() {
+        return ensure().defaultState;
+      },
+      getState(): boolean {
+        return ensure().getState();
+      },
+      watch(...args: Parameters<Store<boolean>["watch"]>) {
+        return ensure().watch(...args);
+      },
+      subscribe(...args: Parameters<Store<boolean>["subscribe"]>) {
+        return ensure().subscribe(...args);
+      },
+      map(...args: Parameters<Store<boolean>["map"]>) {
+        return (ensure().map as (...a: unknown[]) => unknown)(...args);
+      },
+      thru(...args: Parameters<Store<boolean>["thru"]>) {
+        return (ensure().thru as (...a: unknown[]) => unknown)(...args);
+      },
+    };
+    const store = proxy as unknown as Store<boolean>;
+    this._hasStores.set(key, store);
+    return store;
   }
 
-  instance(id: ModelInstanceId): Store<Instance | null>;
-  instance(
-    ...parts: [string | number, string | number, ...(string | number)[]]
-  ): Store<Instance | null>;
-  instance(...args: (string | number)[]): Store<Instance | null> {
+  /**
+   * Synchronous instance lookup. Returns the stable proxy Instance or null.
+   *
+   * - Fast path: global cache hit.
+   * - Otherwise: if `$dataMap` has data for this id (e.g. after
+   *   `fork({ values })` hydration), reconstructs and caches the proxy.
+   *
+   * Instance field stores are scope-aware via `$dataMap`, so a single proxy
+   * safely serves all scopes.
+   */
+  get(id: ModelInstanceId): Instance | null;
+  get(...parts: [string | number, string | number, ...(string | number)[]]): Instance | null;
+  get(...args: (string | number)[]): Instance | null {
     const serializedId =
       args.length === 1
         ? String(args[0])
         : args.map(String).join(InstanceCache.COMPOUND_PK_DELIMITER);
-
-    let store = this._instanceStores.get(serializedId);
-    if (store) return store;
-
-    // combine with $idSet (O(1) lookup) and $dataMap for scoped reconstruction.
-    // .map() suppresses same-value (===) updates — combine() alone does not
-    // in scoped contexts, causing spurious EachItem rerenders.
-    store = combine(this.$idSet, this.getDataMap(), (idSet, dataMap) => {
-      if (!idSet.has(serializedId)) return null;
-      // Fast path: already cached globally
-      const cached = this.getInstance(serializedId);
-      if (cached) return cached;
-      // Scope-aware: reconstruct from scoped $dataMap
-      return this.getInstanceScoped(serializedId, dataMap) ?? null;
-    }).map((inst) => inst, { skipVoid: false });
-
-    this._instanceStores.set(serializedId, store);
-    return store;
+    const cached = this.getInstance(serializedId);
+    if (cached) return cached;
+    const reconstructed = this.getInstanceOrReconstruct(serializedId);
+    return reconstructed ?? null;
   }
 
-  byPartialKey(...prefix: [string | number, ...(string | number)[]]): Store<Instance[]> {
-    const memoKey = prefix.map(String).join(InstanceCache.COMPOUND_PK_DELIMITER);
-
-    let store = this._partialKeyStores.get(memoKey);
-    if (store) return store;
-
-    const prefixStrs = prefix.map(String);
-    const prefixLen = prefixStrs.length;
-
-    // combine with $dataMap so byPartialKey works against SSR-hydrated scopes
-    // where the imperative compound-key map and global cache are empty. The
-    // compound key parts are parsed from the serialised id string directly
-    // (instead of the cache's compoundKeys map), and instances are reconstructed
-    // via the scope-aware path.
-    store = combine(this.$ids, this.getDataMap(), (ids, dataMap) => {
-      const results: Instance[] = [];
-      for (const id of ids) {
-        const idStr = String(id);
-        const parts = idStr.split(InstanceCache.COMPOUND_PK_DELIMITER);
-        if (parts.length < prefixLen) continue;
-        let matches = true;
-        for (let i = 0; i < prefixLen; i++) {
-          if (parts[i] !== prefixStrs[i]) {
-            matches = false;
-            break;
-          }
-        }
-        if (!matches) continue;
-        const cached = this.getInstance(id);
-        if (cached) {
-          results.push(cached);
-          continue;
-        }
-        const reconstructed = this.getInstanceScoped(id, dataMap);
-        if (reconstructed) results.push(reconstructed);
+  /**
+   * Synchronous list of all live Instance proxies (global scope).
+   * For scoped reads, use `scope.getState(model.$ids)` + `model.get(id)`.
+   */
+  instances(): Instance[] {
+    const ids = this.$ids.getState();
+    const out: Instance[] = [];
+    for (const id of ids) {
+      const cached = this.getInstance(id);
+      if (cached) {
+        out.push(cached);
+        continue;
       }
-      return results;
-    });
-
-    this._partialKeyStores.set(memoKey, store);
-    return store;
+      const reconstructed = this.getInstanceOrReconstruct(id);
+      if (reconstructed) out.push(reconstructed);
+    }
+    return out;
   }
 }

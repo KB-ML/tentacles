@@ -37,7 +37,7 @@ Solid 1.8+ is required for stable `createContext` typings and the `createEffect`
 |---|---|
 | `ViewProps<Shape>` | Props of `<View>`: `{ model, props?, children? }`. |
 | `EachProps<Instance>` | Props of `<Each>`: `{ model, source?, id?, from?, fallback?, children? }`. |
-| `ModelLike<Instance>` | Structural subset of `Model`: `{ name, instance(idOrKey) → Store<Instance \| null> }`. |
+| `ModelLike<Instance>` | Structural subset of `Model`: `{ name, $ids, $idSet, get(id), get(...parts), getSync(id), getByKeySync(...parts), getRefMeta(field) }`. |
 
 ## Lifecycle contract
 

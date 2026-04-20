@@ -39,7 +39,6 @@ export class RefApiFactory {
   private readonly oneRefs = new Set<OneEntry>();
 
   constructor(
-    private readonly getInstance: (id: ModelInstanceId) => unknown,
     private readonly registry: SidRegistry,
     private readonly getFieldUpdated: () => EventCallable<{
       id: string;
@@ -141,26 +140,14 @@ export class RefApiFactory {
     register(add);
     register(remove);
 
-    let _$resolved: ReturnType<typeof $ids.map> | null = null;
-    const getInstance = this.getInstance;
     const api = {
       $ids,
       add,
       remove,
-      get $resolved() {
-        if (!_$resolved) {
-          _$resolved = $ids.map((refIds: (string | number)[]) =>
-            refIds
-              .map((id: string | number) => getInstance(id))
-              .filter((inst): inst is NonNullable<typeof inst> => inst != null),
-          );
-        }
-        return _$resolved;
-      },
       __refEntry: entry,
     };
 
-    return { api: api as RefManyApi, registeredSids };
+    return { api, registeredSids };
   }
 
   private createOne(
@@ -203,23 +190,13 @@ export class RefApiFactory {
     register(set);
     register(clear);
 
-    let _$resolved: ReturnType<typeof $id.map> | null = null;
-    const getInstance = this.getInstance;
     const api = {
       $id,
       set,
       clear,
-      get $resolved() {
-        if (!_$resolved) {
-          _$resolved = $id.map((id: string | number | null) =>
-            id != null ? (getInstance(id) ?? null) : null,
-          );
-        }
-        return _$resolved;
-      },
       __refEntry: entry,
     };
 
-    return { api: api as RefOneApi, registeredSids };
+    return { api, registeredSids };
   }
 }

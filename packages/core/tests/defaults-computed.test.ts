@@ -479,9 +479,10 @@ describe("Computed: with refs", () => {
       )
       .pk("id");
 
-    const todoModel = createModel({ contract: todoContract });
-    todoModel.bind({ items: () => itemModel });
-
+    const todoModel = createModel({ contract: todoContract,
+    refs: { items: () => itemModel },
+  });
+   
     const todo = todoModel.create({ id: "t1", title: "My List" });
     expect(todo.$itemCount.getState()).toBe(0);
 

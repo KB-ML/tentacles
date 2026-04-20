@@ -30,7 +30,7 @@ class CollectionQuery<Contract, Generics, Ext> {
 }
 ```
 
-`$list` / `$first` emit **plain data rows** — field snapshots with no reactive accessors. For reactive per-row access (stores, events, refs), read an id from `$ids` / `$list` (rows have their PK fields) and call `Model.instance(id)`.
+`$list` / `$first` emit **plain data rows** — field snapshots with no reactive accessors. For reactive per-row access (stores, events, refs), read an id from `$ids` / `$list` (rows have their PK fields) and call `Model.get(id)`.
 
 ## Chain methods
 
@@ -150,7 +150,7 @@ The internal pipeline works on `ModelInstanceId[]` (id pipeline). `$ids` is the 
 $ids: Store<ModelInstanceId[]>
 ```
 
-Paginated ids in display order (post-filter, post-sort, post-`offset`/`limit`). This is the authoritative stream — use it to drive per-row reactive access via `Model.instance(id)`.
+Paginated ids in display order (post-filter, post-sort, post-`offset`/`limit`). This is the authoritative stream — use it to drive per-row reactive access via `Model.get(id)`.
 
 ### `.$list`
 
@@ -158,9 +158,9 @@ Paginated ids in display order (post-filter, post-sort, post-`offset`/`limit`). 
 $list: Store<Row[]>
 ```
 
-Paginated rows as **plain data** — each row is a `{ field: value }` snapshot of that instance's queryable fields (state + computed + extension stores). No `$`-prefixed stores, no events, no `__id`. Perfect for rendering; use `Model.instance(id)` when you need reactive access to a single row.
+Paginated rows as **plain data** — each row is a `{ field: value }` snapshot of that instance's queryable fields (state + computed + extension stores). No `$`-prefixed stores, no events, no `__id`. Perfect for rendering; use `Model.get(id)` when you need reactive access to a single row.
 
-Rows include primary-key fields, so you can call `Model.instance({ pk: row.pk })` directly.
+Rows include primary-key fields, so you can call `Model.get({ pk: row.pk })` directly.
 
 ### `.$first`
 
@@ -217,7 +217,7 @@ The filter stage has two update paths:
 
 The incremental path only adds/removes the changed instance to/from the filtered set based on whether it still matches. This turns typical per-field edits (a user toggling a checkbox in a 10 000-row table) from O(N) scans into O(1) updates.
 
-The sort stage tracks the last-changed field through an internal `$lastField` store. If the changed field is not in the `orderBy` list, re-sort is skipped entirely — the cached sorted array is reused.
+The sort stage skips re-sort when the changed field is not part of `orderBy` and the filtered set is structurally unchanged — the cached sorted array is reused.
 
 `$list` dedups by reference equality: if the paginated id list and all row references are unchanged, the previous list array is returned — so mutations to instances outside the current page don't trigger renders.
 
@@ -259,7 +259,7 @@ const results = userModel.query()
   .offset($page.map((p) => p * pageSize))
 
 results.$list        // Store<Row[]>             — plain snapshots for rendering
-results.$ids         // Store<ModelInstanceId[]> — per-row reactive access via Model.instance(id)
+results.$ids         // Store<ModelInstanceId[]> — per-row reactive access via Model.get(id)
 results.$count       // Store<number>            — page count
 results.$totalCount  // Store<number>            — total match count
 results.$first       // Store<Row | null>        — plain row or null

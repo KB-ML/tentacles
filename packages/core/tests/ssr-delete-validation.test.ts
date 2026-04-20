@@ -32,9 +32,10 @@ describe("Phase 8 — restrict policy against fork-hydrated data", () => {
       .ref("items", "many", { onDelete: "restrict" })
       .pk("id");
     const itemModel = createModel({ contract: itemContract, name: "p8-restrict-item" });
-    const listModel = createModel({ contract: listContract, name: "p8-restrict-list" });
-    listModel.bind({ items: () => itemModel });
-
+    const listModel = createModel({ contract: listContract, name: "p8-restrict-list",
+    refs: { items: () => itemModel },
+  });
+   
     const serverScope = fork();
     await allSettled(itemModel.createManyFx, {
       scope: serverScope,
@@ -74,9 +75,10 @@ describe("Phase 8 — restrict policy against fork-hydrated data", () => {
       .ref("team", "one", { onDelete: "restrict" })
       .pk("id");
     const teamModel = createModel({ contract: teamContract, name: "p8-restrict-team" });
-    const playerModel = createModel({ contract: playerContract, name: "p8-restrict-player" });
-    playerModel.bind({ team: () => teamModel });
-
+    const playerModel = createModel({ contract: playerContract, name: "p8-restrict-player",
+    refs: { team: () => teamModel },
+  });
+   
     const serverScope = fork();
     await allSettled(teamModel.createFx, {
       scope: serverScope,
@@ -109,9 +111,10 @@ describe("Phase 8 — restrict policy against fork-hydrated data", () => {
       .ref("items", "many", { onDelete: "restrict" })
       .pk("id");
     const itemModel = createModel({ contract: itemContract, name: "p8-restrict-empty-item" });
-    const listModel = createModel({ contract: listContract, name: "p8-restrict-empty-list" });
-    listModel.bind({ items: () => itemModel });
-
+    const listModel = createModel({ contract: listContract, name: "p8-restrict-empty-list",
+    refs: { items: () => itemModel },
+  });
+   
     const serverScope = fork();
     await allSettled(listModel.createFx, {
       scope: serverScope,
@@ -142,9 +145,10 @@ describe("Phase 8 — cascade policy against fork-hydrated data", () => {
       .ref("items", "many", { onDelete: "cascade" })
       .pk("id");
     const itemModel = createModel({ contract: itemContract, name: "p8-cascade-item" });
-    const listModel = createModel({ contract: listContract, name: "p8-cascade-list" });
-    listModel.bind({ items: () => itemModel });
-
+    const listModel = createModel({ contract: listContract, name: "p8-cascade-list",
+    refs: { items: () => itemModel },
+  });
+   
     const serverScope = fork();
     await allSettled(itemModel.createManyFx, {
       scope: serverScope,
@@ -184,9 +188,10 @@ describe("Phase 8 — scoped clearFx enforces restrict", () => {
       .ref("items", "many", { onDelete: "restrict" })
       .pk("id");
     const itemModel = createModel({ contract: itemContract, name: "p8-clear-item" });
-    const listModel = createModel({ contract: listContract, name: "p8-clear-list" });
-    listModel.bind({ items: () => itemModel });
-
+    const listModel = createModel({ contract: listContract, name: "p8-clear-list",
+    refs: { items: () => itemModel },
+  });
+   
     const serverScope = fork();
     await allSettled(itemModel.createManyFx, {
       scope: serverScope,
@@ -220,9 +225,10 @@ describe("Phase 8 — scoped clearFx enforces restrict", () => {
       .ref("items", "many", { onDelete: "restrict" })
       .pk("id");
     const itemModel = createModel({ contract: itemContract, name: "p8-clear-ok-item" });
-    const listModel = createModel({ contract: listContract, name: "p8-clear-ok-list" });
-    listModel.bind({ items: () => itemModel });
-
+    const listModel = createModel({ contract: listContract, name: "p8-clear-ok-list",
+    refs: { items: () => itemModel },
+  });
+   
     const serverScope = fork();
     await allSettled(listModel.createManyFx, {
       scope: serverScope,
@@ -249,9 +255,10 @@ describe("Phase 8 — scope isolation of failed deletes", () => {
       .ref("items", "many", { onDelete: "restrict" })
       .pk("id");
     const itemModel = createModel({ contract: itemContract, name: "p8-iso-item" });
-    const listModel = createModel({ contract: listContract, name: "p8-iso-list" });
-    listModel.bind({ items: () => itemModel });
-
+    const listModel = createModel({ contract: listContract, name: "p8-iso-list",
+    refs: { items: () => itemModel },
+  });
+   
     // Seed two independent server scopes
     const serverA = fork();
     await allSettled(itemModel.createFx, { scope: serverA, params: { id: "i1" } });

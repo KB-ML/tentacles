@@ -14,9 +14,10 @@ describe("Tree create: ref.many inline", () => {
     .store("title", (s) => s<string>())
     .ref("items", "many")
     .pk("id");
-  const parentModel = createModel({ contract: parentContract });
-  parentModel.bind({ items: () => childModel });
-
+  const parentModel = createModel({ contract: parentContract,
+    refs: { items: () => childModel },
+  });
+ 
   it("creates children inline and links them", () => {
     const parent = parentModel.create({
       id: "p1",
@@ -28,8 +29,8 @@ describe("Tree create: ref.many inline", () => {
     });
 
     expect(parent.items.$ids.getState()).toEqual(["c1", "c2"]);
-    expect(childModel.instance("c1").getState()?.$name.getState()).toBe("Child 1");
-    expect(childModel.instance("c2").getState()?.$name.getState()).toBe("Child 2");
+    expect(childModel.get("c1")?.$name.getState()).toBe("Child 1");
+    expect(childModel.get("c2")?.$name.getState()).toBe("Child 2");
   });
 
   it("links existing children by ID", () => {
@@ -54,7 +55,7 @@ describe("Tree create: ref.many inline", () => {
     });
 
     expect(parent.items.$ids.getState()).toEqual(["pre", "new-child"]);
-    expect(childModel.instance("new-child").getState()?.$name.getState()).toBe("New");
+    expect(childModel.get("new-child")?.$name.getState()).toBe("New");
   });
 
   it("works without refs (backward compat)", () => {
@@ -80,9 +81,10 @@ describe("Tree create: ref.one inline", () => {
     .store("label", (s) => s<string>())
     .ref("selected", "one")
     .pk("id");
-  const ownerModel = createModel({ contract: ownerContract });
-  ownerModel.bind({ selected: () => targetModel });
-
+  const ownerModel = createModel({ contract: ownerContract,
+    refs: { selected: () => targetModel },
+  });
+ 
   it("creates child inline and sets ref", () => {
     const owner = ownerModel.create({
       id: "o1",
@@ -91,7 +93,7 @@ describe("Tree create: ref.one inline", () => {
     });
 
     expect(owner.selected.$id.getState()).toBe("t1");
-    expect(targetModel.instance("t1").getState()?.$value.getState()).toBe(42);
+    expect(targetModel.get("t1")?.$value.getState()).toBe(42);
   });
 
   it("links existing by ID", () => {
@@ -140,11 +142,11 @@ describe("Tree create: self-ref (recursive)", () => {
 
     expect(root.children.$ids.getState()).toEqual(["child-1", "child-2"]);
 
-    const child1 = treeModel.instance("child-1").getState();
+    const child1 = treeModel.get("child-1");
     expect(child1?.$name.getState()).toBe("Child 1");
     expect(child1?.children.$ids.getState()).toEqual(["gc-1"]);
 
-    const gc = treeModel.instance("gc-1").getState();
+    const gc = treeModel.get("gc-1");
     expect(gc?.$name.getState()).toBe("Grandchild");
     expect(gc?.children.$ids.getState()).toEqual([]);
   });
@@ -162,9 +164,10 @@ describe("Tree create: scoped (SSR)", () => {
     .store("name", (s) => s<string>())
     .ref("items", "many")
     .pk("id");
-  const listModel = createModel({ contract: listContract });
-  listModel.bind({ items: () => itemModel });
-
+  const listModel = createModel({ contract: listContract,
+    refs: { items: () => itemModel },
+  });
+ 
   it("creates tree in scope", async () => {
     const scope = fork();
 
@@ -180,11 +183,11 @@ describe("Tree create: scoped (SSR)", () => {
       { scope },
     );
 
-    const list = listModel.instance("list-1").getState()!;
+    const list = listModel.get("list-1")!;
     expect(scope.getState(list.$name)).toBe("My List");
     expect(scope.getState(list.items.$ids)).toEqual(["i1", "i2"]);
 
-    const item1 = itemModel.instance("i1").getState()!;
+    const item1 = itemModel.get("i1")!;
     expect(scope.getState(item1.$text)).toBe("Item 1");
   });
 });
@@ -207,9 +210,10 @@ describe("Composite PK from refs (many-to-many)", () => {
     .ref("task", "one")
     .store("hours", (s) => s<number>())
     .pk("company", "task");
-  const assignmentModel = createModel({ contract: assignmentContract });
-  assignmentModel.bind({ company: () => companyModel, task: () => taskModel });
-
+  const assignmentModel = createModel({ contract: assignmentContract,
+    refs: { company: () => companyModel, task: () => taskModel },
+  });
+ 
   it("derives PK from ref IDs (string refs)", () => {
     companyModel.create({ id: "acme", name: "Acme Corp" });
     taskModel.create({ id: "t1", title: "Build widget" });
@@ -230,8 +234,8 @@ describe("Composite PK from refs (many-to-many)", () => {
     });
 
     expect(assignment.__id).toBe("globex\x00t2");
-    expect(companyModel.instance("globex").getState()?.$name.getState()).toBe("Globex");
-    expect(taskModel.instance("t2").getState()?.$title.getState()).toBe("Ship feature");
+    expect(companyModel.get("globex")?.$name.getState()).toBe("Globex");
+    expect(taskModel.get("t2")?.$title.getState()).toBe("Ship feature");
   });
 
   it("derives PK from mixed refs (inline + ID)", () => {

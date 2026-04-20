@@ -154,7 +154,7 @@ describe("COLD: instance(id) reactive", () => {
   let counter = 0;
 
   bench("instance(id).getState() on 1k pool", () => {
-    model.instance(ids[counter % 1_000]!).getState();
+    model.get(ids[counter % 1_000]!);
     counter++;
   });
 });

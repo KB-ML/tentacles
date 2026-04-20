@@ -142,7 +142,7 @@ const $hasFirstError = combine($first, (row) =>
 
 `$at` is reactive — the returned store updates whenever the array shifts. Holding `$at(0)` across an `insert({ index: 0, … })` returns a different row instance after the insert, which is usually what you want.
 
-For random access by stable key rather than position, use the model APIs spread onto the array: `form.contacts.instance(rowId)` returns a `FormRowShape<Row>` directly. The row id is whatever the synthetic `__rowId` autoincrement assigned (or your custom `key` if you provided one).
+For random access by stable key rather than position, use the model APIs spread onto the array: `form.contacts.get(rowId)` returns a `FormRowShape<Row>` directly. The row id is whatever the synthetic `__rowId` autoincrement assigned (or your custom `key` if you provided one).
 
 ## Aggregates roll up automatically
 

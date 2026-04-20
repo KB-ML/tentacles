@@ -522,12 +522,16 @@ export function buildFormArray<Row extends Record<string, unknown>>(
     return errList.every((e) => e === null || (typeof e === "object" && isEmptyErrors(e)));
   });
 
-  // 7. Positional helpers — reactive, O(1) via model.instance() memoized lookup
+  // 7. Positional helpers — reactive. Depends on $ids (membership) and
+  // the global cache map indirectly via the reconstruction path used by
+  // rowModel.get(). Since Instance proxies are stable, returning
+  // model.get(id) from a combine over $ids gives a store that updates
+  // only when the positional id changes.
   const $at = (index: number) =>
     combine(rowModel.$ids, (ids) => {
       const id = ids[index];
       if (id == null) return null;
-      return rowModel.instance(id);
+      return rowModel.get(id);
     });
 
   // 8. Assemble FormArrayShape
@@ -535,8 +539,8 @@ export function buildFormArray<Row extends Record<string, unknown>>(
     // Spread model APIs
     $ids: rowModel.$ids,
     $count: rowModel.$count,
-    $instances: rowModel.$instances,
-    instance: rowModel.instance.bind(rowModel),
+    get: rowModel.get.bind(rowModel),
+    instances: rowModel.instances.bind(rowModel),
     createFx: rowModel.createFx,
     createManyFx: rowModel.createManyFx,
     deleteFx: rowModel.deleteFx,

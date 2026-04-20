@@ -5,7 +5,7 @@ import { createContract, createModel } from "../index";
 // ─────────────────────────────────────────────────────────────────────────────
 // LIVING GRAPH SSR
 //
-// Tests for $ids, instance(), __id/__model, and $resolved under fork/serialize/hydrate.
+// Tests for $ids, instance(), __id/__model, and refs under fork/serialize/hydrate.
 // ─────────────────────────────────────────────────────────────────────────────
 
 function makeTargetModel(name?: string) {
@@ -69,7 +69,7 @@ describe("LIVING GRAPH SSR: $ids serialize behavior", () => {
     expect(model.$ids.getState()).toEqual(["x", "y"]);
 
     // Store values hydrate correctly
-    const inst = model.instance("x").getState();
+    const inst = model.get("x");
     expect(inst).not.toBeNull();
     expect(clientScope.getState(inst!.$count)).toBe(10);
   });
@@ -99,7 +99,7 @@ describe("LIVING GRAPH SSR: instance() with scoped values", () => {
     model.create({ id: "gs-1", name: "test", count: 0 });
 
     const scope = fork();
-    const inst = model.instance("gs-1").getState()!;
+    const inst = model.get("gs-1")!;
     await allSettled(inst.inc, { scope });
     await allSettled(inst.inc, { scope });
 
@@ -151,18 +151,18 @@ describe("LIVING GRAPH SSR: __id/__model with scoped create", () => {
     const a = await model.create({ id: "mgs-a", name: "A" }, { scope });
     await model.create({ id: "mgs-b", name: "B" }, { scope });
 
-    const b = a.__model.instance("mgs-b").getState();
+    const b = a.__model.get("mgs-b");
     expect(b).not.toBeNull();
     expect(b!.__id).toBe("mgs-b");
   });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 4. $resolved — NOT SERIALIZED
+// 4. Ref data flows through $dataMap (serialized inside $dataMap, not separately)
 // ─────────────────────────────────────────────────────────────────────────────
 
-describe("LIVING GRAPH SSR: $resolved serialize behavior", () => {
-  it("$resolved is not included in serialized output", async () => {
+describe("LIVING GRAPH SSR: ref serialize behavior", () => {
+  it("ref data is serialized inside $dataMap, not as separate stores", async () => {
     const targetModel = makeTargetModel();
     const contract = createContract()
       .store("id", (s) => s<string>())
@@ -173,8 +173,8 @@ describe("LIVING GRAPH SSR: $resolved serialize behavior", () => {
       contract,
       name: "resolvedSer",
       fn: ({ items, current }) => ({ items, current }),
+      refs: { items: () => targetModel, current: () => targetModel },
     });
-    model.bind({ items: () => targetModel, current: () => targetModel });
 
     targetModel.create({ id: "t1", name: "A" });
     const inst = model.create({ id: "rs-1" });
@@ -188,8 +188,6 @@ describe("LIVING GRAPH SSR: $resolved serialize behavior", () => {
 
     // Ref data flows through $dataMap — no separate ref store SIDs
     expect(keys).toContain("tentacles:resolvedSer:__dataMap__");
-    // $resolved has serialize: "ignore" — should not appear
-    expect(keys.every((k) => !k.includes("$resolved"))).toBe(true);
     // Verify ref data is inside $dataMap
     const dataMap = values["tentacles:resolvedSer:__dataMap__"] as Record<string, Record<string, unknown>>;
     expect(dataMap["rs-1"]?.items).toEqual(["t1"]);
@@ -198,11 +196,11 @@ describe("LIVING GRAPH SSR: $resolved serialize behavior", () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 5. $resolved — RE-DERIVES AFTER HYDRATION
+// 5. Ref ids hydrate; caller resolves via model.instance()
 // ─────────────────────────────────────────────────────────────────────────────
 
-describe("LIVING GRAPH SSR: $resolved re-derives after hydration", () => {
-  it("ref many $resolved re-derives from hydrated $ids + model registry", async () => {
+describe("LIVING GRAPH SSR: ref ids hydrate after fork/serialize", () => {
+  it("ref many $ids hydrates; caller resolves via targetModel.instance(id)", async () => {
     const targetModel = makeTargetModel();
     const contract = createContract()
       .store("id", (s) => s<string>())
@@ -211,8 +209,8 @@ describe("LIVING GRAPH SSR: $resolved re-derives after hydration", () => {
     const model = createModel({
       contract,
       fn: ({ items }) => ({ items }),
+      refs: { items: () => targetModel },
     });
-    model.bind({ items: () => targetModel });
 
     targetModel.create({ id: "t1", name: "A" });
     targetModel.create({ id: "t2", name: "B" });
@@ -229,15 +227,9 @@ describe("LIVING GRAPH SSR: $resolved re-derives after hydration", () => {
 
     // $ids hydrated from serialization
     expect(clientScope.getState(inst.items.$ids)).toEqual(["t1", "t2"]);
-
-    // $resolved re-derives — reads global instances via model.instance()
-    const resolved = inst.items.$resolved.getState();
-    // Global $resolved uses global $ids (empty) — so it should be based on global state
-    // The point is: $resolved itself is not serialized, it derives from its inputs
-    expect(resolved).toBeDefined();
   });
 
-  it("ref one $resolved re-derives from hydrated $id", async () => {
+  it("ref one $id hydrates after fork/serialize", async () => {
     const targetModel = makeTargetModel();
     const contract = createContract()
       .store("id", (s) => s<string>())
@@ -246,8 +238,8 @@ describe("LIVING GRAPH SSR: $resolved re-derives after hydration", () => {
     const model = createModel({
       contract,
       fn: ({ current }) => ({ current }),
+      refs: { current: () => targetModel },
     });
-    model.bind({ current: () => targetModel });
 
     targetModel.create({ id: "t1", name: "X" });
     const inst = model.create({ id: "roh-1" });
@@ -263,11 +255,11 @@ describe("LIVING GRAPH SSR: $resolved re-derives after hydration", () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 6. $resolved — DANGLING REFS AFTER DELETE IN SSR
+// 6. Dangling refs auto-clean after target delete
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe("LIVING GRAPH SSR: dangling refs after target delete", () => {
-  it("auto-cleans ref many when target is deleted", async () => {
+  it("auto-cleans ref many $ids when target is deleted", () => {
     const targetModel = makeTargetModel();
     const contract = createContract()
       .store("id", (s) => s<string>())
@@ -276,8 +268,8 @@ describe("LIVING GRAPH SSR: dangling refs after target delete", () => {
     const model = createModel({
       contract,
       fn: ({ items }) => ({ items }),
+      refs: { items: () => targetModel },
     });
-    model.bind({ items: () => targetModel });
 
     targetModel.create({ id: "t1", name: "A" });
     targetModel.create({ id: "t2", name: "B" });
@@ -285,17 +277,21 @@ describe("LIVING GRAPH SSR: dangling refs after target delete", () => {
     inst.items.add("t1");
     inst.items.add("t2");
 
-    expect(inst.items.$resolved.getState()).toHaveLength(2);
+    expect(inst.items.$ids.getState()).toEqual(["t1", "t2"]);
 
     // Delete a target — auto-removed from $ids
     targetModel.delete("t1");
 
     expect(inst.items.$ids.getState()).toEqual(["t2"]);
-    expect(inst.items.$resolved.getState()).toHaveLength(1);
-    expect(inst.items.$resolved.getState()[0].__id).toBe("t2");
+    const resolved = inst.items.$ids
+      .getState()
+      .map((id) => targetModel.get(id))
+      .filter((x): x is NonNullable<typeof x> => x != null);
+    expect(resolved).toHaveLength(1);
+    expect(resolved[0]!.__id).toBe("t2");
   });
 
-  it("auto-clears ref one when target is deleted", () => {
+  it("auto-clears ref one $id when target is deleted", () => {
     const targetModel = makeTargetModel();
     const contract = createContract()
       .store("id", (s) => s<string>())
@@ -304,29 +300,28 @@ describe("LIVING GRAPH SSR: dangling refs after target delete", () => {
     const model = createModel({
       contract,
       fn: ({ current }) => ({ current }),
+      refs: { current: () => targetModel },
     });
-    model.bind({ current: () => targetModel });
 
     targetModel.create({ id: "t1", name: "X" });
     const inst = model.create({ id: "dor-1" });
     inst.current.set("t1");
 
-    expect(inst.current.$resolved.getState()).not.toBeNull();
+    expect(inst.current.$id.getState()).toBe("t1");
 
     // Delete target — ref auto-clears
     targetModel.delete("t1");
 
     expect(inst.current.$id.getState()).toBeNull();
-    expect(inst.current.$resolved.getState()).toBeNull();
   });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 7. SELF-REF $resolved IN SSR
+// 7. Self-ref ids in SSR
 // ─────────────────────────────────────────────────────────────────────────────
 
-describe("LIVING GRAPH SSR: self-ref $resolved", () => {
-  it("self-ref $resolved works through fork/serialize/hydrate", async () => {
+describe("LIVING GRAPH SSR: self-ref ids", () => {
+  it("self-ref $ids hydrates through fork/serialize", async () => {
     const contract = createContract()
       .store("id", (s) => s<string>())
       .store("text", (s) => s<string>())
@@ -351,15 +346,11 @@ describe("LIVING GRAPH SSR: self-ref $resolved", () => {
 
     // $ids hydrated
     expect(hydrated.getState(root.replies.$ids)).toEqual(["c2", "c3"]);
-
-    // Global $resolved derives from global $ids + model.instance()
-    // Global $ids is empty (no global add was done), so global resolved is empty
-    // Scope-level resolved would need scope-aware get() which we don't have
-    // The key SSR property: $ids serializes, $resolved is derived
-    expect(root.replies.$resolved.getState()).toEqual([]);
+    // Global $ids is empty (no global add was done)
+    expect(root.replies.$ids.getState()).toEqual([]);
   });
 
-  it("self-ref $resolved with global mutations", () => {
+  it("self-ref with global mutations resolves manually via model.instance()", () => {
     const contract = createContract()
       .store("id", (s) => s<string>())
       .store("text", (s) => s<string>())
@@ -377,11 +368,15 @@ describe("LIVING GRAPH SSR: self-ref $resolved", () => {
     parent.children.add("ch1");
     parent.children.add("ch2");
 
-    const resolved = parent.children.$resolved.getState();
+    const ids = parent.children.$ids.getState();
+    expect(ids).toEqual(["ch1", "ch2"]);
+    const resolved = ids
+      .map((id) => model.get(id))
+      .filter((x): x is NonNullable<typeof x> => x != null);
     expect(resolved).toHaveLength(2);
-    expect(resolved[0].__id).toBe("ch1");
-    expect(resolved[1].__id).toBe("ch2");
-    expect(resolved[0].$text.getState()).toBe("Child 1");
+    expect(resolved[0]!.__id).toBe("ch1");
+    expect(resolved[1]!.__id).toBe("ch2");
+    expect(resolved[0]!.$text.getState()).toBe("Child 1");
   });
 });
 
@@ -401,9 +396,9 @@ describe("LIVING GRAPH SSR: full round-trip scenario", () => {
       contract,
       name: "ssrPlaylist",
       fn: ({ $name, songs }) => ({ $name, songs }),
-    });
-    playlistModel.bind({ songs: () => songModel });
-
+    refs: { songs: () => songModel },
+  });
+   
     songModel.create({ id: "s1", name: "Song A" });
     songModel.create({ id: "s2", name: "Song B" });
     songModel.create({ id: "s3", name: "Song C" });
@@ -429,7 +424,7 @@ describe("LIVING GRAPH SSR: full round-trip scenario", () => {
     expect(songModel.$ids.getState()).toEqual(["s1", "s2", "s3"]);
 
     // songModel.instance() works
-    const song1 = songModel.instance("s1").getState();
+    const song1 = songModel.get("s1");
     expect(song1).not.toBeNull();
     expect(song1!.__id).toBe("s1");
     expect(song1!.$name.getState()).toBe("Song A");
@@ -461,7 +456,7 @@ describe("LIVING GRAPH SSR: concurrent requests with $ids", () => {
     const results = await Promise.all(
       Array.from({ length: 20 }, async (_, i) => {
         const scope = fork();
-        const inst = model.instance(`ci-${(i % 3) + 1}`).getState()!;
+        const inst = model.get(`ci-${(i % 3) + 1}`)!;
         await allSettled(inst.$name, { scope, params: `Request-${i}` });
         return serialize(scope);
       }),
@@ -474,7 +469,7 @@ describe("LIVING GRAPH SSR: concurrent requests with $ids", () => {
     for (let i = 0; i < results.length; i++) {
       const values = results[i]!;
       const hydrated = fork({ values });
-      const inst = model.instance(`ci-${(i % 3) + 1}`).getState()!;
+      const inst = model.get(`ci-${(i % 3) + 1}`)!;
       expect(hydrated.getState(inst.$name)).toBe(`Request-${i}`);
     }
   });
@@ -507,7 +502,7 @@ describe("LIVING GRAPH SSR: delete/clear with $ids", () => {
     // Global $ids unchanged
     expect(model.$ids.getState()).toEqual(["sd-1", "sd-2"]);
     // Instance still accessible via instance()
-    expect(model.instance("sd-1").getState()).not.toBeNull();
+    expect(model.get("sd-1")).not.toBeNull();
   });
 
   it("global delete removes from $ids", () => {
@@ -527,7 +522,7 @@ describe("LIVING GRAPH SSR: delete/clear with $ids", () => {
     model.delete("gd-2");
 
     expect(model.$ids.getState()).toEqual(["gd-1", "gd-3"]);
-    expect(model.instance("gd-2").getState()).toBeNull();
+    expect(model.get("gd-2")).toBeNull();
   });
 
   it("global clear empties $ids", () => {
@@ -546,7 +541,7 @@ describe("LIVING GRAPH SSR: delete/clear with $ids", () => {
     model.clear();
 
     expect(model.$ids.getState()).toEqual([]);
-    expect(model.instance("gc-1").getState()).toBeNull();
+    expect(model.get("gc-1")).toBeNull();
   });
 
   it("scoped clear does not affect global $ids", async () => {

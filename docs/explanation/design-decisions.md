@@ -338,9 +338,9 @@ For most users this is not a real cost; effector releases are not disruptive, an
 
 For users with older codebases, the upgrade path is straightforward (effector's migration guide is short), and they pick up other improvements along the way.
 
-## Zero boilerplate — the shape of a contract is enough to generate `$ids`, `$count`, `$instances`, `createFx`
+## Zero boilerplate — the shape of a contract is enough to generate `$ids`, `$count`, `instances()`, `createFx`
 
-When you declare a contract and call `createModel({ contract })`, you immediately have `bookModel.$ids`, `bookModel.$count`, `bookModel.$instances`, `bookModel.createFx`, `bookModel.created`, and a dozen other units.
+When you declare a contract and call `createModel({ contract })`, you immediately have `bookModel.$ids`, `bookModel.$count`, `bookModel.instances()`, `bookModel.createFx`, `bookModel.created`, and a dozen other units.
 
 You did not ask for them. They are generated from the contract's shape.
 
@@ -564,31 +564,26 @@ Contracts are reusable units; models are disposable instances of them.
 
 Thinking about them separately makes testing easier and enables patterns the single-model case would not support.
 
-## Lazy `$instances`
+## Sync `instances()` instead of a `Store<Instance[]>`
 
-`Model.$instances` is a lazy store.
+`Model.instances()` is a synchronous method, not a store.
 
-It does not materialize the list of instance proxies until someone subscribes to it.
+Instance proxies are stable objects whose reactivity lives in per-field `$field` stores. Wrapping them in a `Store<Instance[]>` layered stores-of-stores without adding any signal we do not already get from `$ids` (membership) and the field stores themselves.
 
-### The eager alternative
+### The store-of-stores alternative
 
-The alternative would be to maintain the list eagerly, updating it on every create and destroy.
+An earlier version of the API exposed `Model.$instances: Store<Instance[]>` and `Model.instance(id): Store<Instance | null>`.
 
-That would make subscription cheaper (the list is always ready) but force every model to pay the cost of maintaining the list even when no one reads it.
+Subscribing to them did not tell you anything `$ids` / `$idSet` + `get(id)` would not. It did, however, build a reactive node per subscribed id plus the list-store itself — cost with no payoff.
 
-### Why lazy wins
+### Why sync wins
 
-Lazy wins because the common access pattern for `$instances` is infrequent.
+Most callers want one of two things:
 
-Most of the time, users subscribe to `$ids` or `$count`, or they call `.instance(id)` to get a specific one.
+- "Is this id in the collection?" — answered by `$idSet` (O(1) reactive membership)
+- "Give me the Instance for this id right now" — answered by `get(id)` (synchronous)
 
-`$instances` is reached for when you want to iterate the whole set, which is a smaller fraction of total accesses.
-
-### The residual cost
-
-The first subscription pays a small setup cost.
-
-After that, subsequent subscriptions are free because the lazy materialization is a one-time thing.
+For scoped reads the `getSync(id, scope)` / `getByKeySync(...parts, scope)` variants route through `scope.getState($dataMap)`. Inside `combine` / `sample` you already receive a scope-correct `$dataMap`, so `combine($ids, ...fields, (ids, ...) => ids.map(model.get))` is both cheap and correct.
 
 ## Summary
 

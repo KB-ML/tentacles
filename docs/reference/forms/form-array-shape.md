@@ -33,7 +33,7 @@ interface FormArrayShape<Row> {
   readonly kind: "array"
 
   // Model APIs (spread at runtime — not typed)
-  // $ids, $count, $instances, instance(), query(), createFx, deleteFx, updateFx
+  // $ids, $count, $idSet, get(), instances(), query(), createFx, deleteFx, updateFx
 }
 ```
 
@@ -139,8 +139,8 @@ Because each row is a model instance, the core `Model` API is spread onto `FormA
 
 - `$ids: Store<number[]>` — row `__rowId` values in order
 - `$count: Store<number>`
-- `$instances: Store<FormRowShape<Row>[]>`
-- `instance(id)` — lookup by `__rowId`
+- `instances(): FormRowShape<Row>[]` — synchronous snapshot
+- `get(id): FormRowShape<Row> | null` — sync lookup by `__rowId`
 - `query()` — full [CollectionQuery](/reference/core/collection-query) API
 - `createFx` / `updateFx` / `deleteFx` — model-level effects
 
@@ -160,7 +160,7 @@ active.$ids     // Store<ModelInstanceId[]>  — driver for <Each>
 active.$list    // Store<Row[]>              — plain row data
 ```
 
-`$list` emits **plain data rows** (field snapshots, no `FormRowShape`). Use `$ids` to drive `<Each>` or call `form.contacts.instance(id)` for the full row shape.
+`$list` emits **plain data rows** (field snapshots, no `FormRowShape`). Use `$ids` to drive `<Each>` or call `form.contacts.get(id)` for the full row shape.
 
 TypeScript will not see these methods on `FormArrayShape` directly — cast to `Model<…>` if you need the types, or use the `<Each>` components which handle this internally.
 

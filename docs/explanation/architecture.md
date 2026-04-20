@@ -118,11 +118,11 @@ It is what makes ten thousand instances cheap. It is also the reason the model l
 
 `$pkeys` keys each instance by the PK signature for compound keys.
 
-`$instances` is a lazy store that materializes the proxy-wrapped instance objects only when someone subscribes to it.
+`instances()` is a synchronous method that returns the current Instance proxies in insertion order. It is not a store — iteration is reactive through `$ids`, not through wrapping the instance list.
 
-The `.instance(id)` and `.byPartialKey(partial)` methods are memoized, so repeated lookups return the same proxy object — critical for React-style reference equality checks.
+The `.get(id)` method returns the same stable proxy for a given id — critical for framework reference-equality checks. On a global cache miss, the proxy is lazily reconstructed from `$dataMap` (e.g. after `fork({ values })` hydration); the reconstructed proxy is scope-independent because its `$field` stores read from the (scope-aware) `$dataMap`.
 
-The registry is the public-facing half of the model. Users who want to observe the population of a model subscribe to `$ids` or `$count`; users who want to iterate subscribe to `$instances`; users who want to find a specific instance call `.instance(id)`.
+The registry is the public-facing half of the model. Users who want to observe the population of a model subscribe to `$ids` / `$idSet` / `$count`; users who want the full list call `instances()`; users who want a specific instance call `.get(id)`.
 
 ### `ModelIndexes`
 
@@ -156,13 +156,13 @@ The bump-and-read pattern is a common one in the library. Anywhere we have an im
 
 `RefApiFactory` is the thing that makes `instance.posts` and `instance.author` feel like normal APIs even though they are reactive.
 
-For a many-ref, you get a `RefManyApi` with `$ids`, `add`, `remove`, and `$resolved` (the actual instance objects).
+For a many-ref, you get a `RefManyApi` with `$ids`, `add`, and `remove`.
 
-For a one-ref, you get a `RefOneApi` with `$id`, `set`, `clear`, and `$resolved`.
+For a one-ref, you get a `RefOneApi` with `$id`, `set`, and `clear`.
 
-Both are backed by `$dataMap` and the inverse index. Creating a ref instance does not create new stores, just accessors.
+Both are backed by `$dataMap` and the inverse index. Creating a ref instance does not create new stores, just accessors. There is no built-in "resolve to instance" store — callers derive that themselves via `targetModel.get(id)`, which keeps the effector graph lean and avoids materialising instances you never render.
 
-The API shape is symmetric between one-refs and many-refs. `$id` or `$ids` for the key; a setter (`set` or `add`/`remove`); `$resolved` for the other-side instances. Users who learn one learn the other.
+The API shape is symmetric between one-refs and many-refs. `$id` or `$ids` for the key; a setter (`set` or `add`/`remove`). Users who learn one learn the other.
 
 ### `PrimaryKeyResolver`
 
@@ -268,7 +268,7 @@ A query chain starts at `Model.query()` and threads through `.where(field, opera
 
 At the end you have a `CollectionQuery`. Internally it runs an id pipeline — filter → sort → paginate, all as `ModelInstanceId[]`. The public outputs are `$ids` (the paginated ids, the authoritative stream), `$list` (plain data rows projected from `$ids + $dataMap`), `$first` (the first row or `null`), `$count`, and `$totalCount`.
 
-`$list` emits **plain rows** — field snapshots, no stores, no events. For reactive per-row access (e.g. writing to `$field`, listening to per-row events), iterate `$ids` and call `Model.instance(id)`.
+`$list` emits **plain rows** — field snapshots, no stores, no events. For reactive per-row access (e.g. writing to `$field`, listening to per-row events), iterate `$ids` and call `Model.get(id)`.
 
 The chain is immutable. Each builder method returns a new `QueryDescriptor` — a plain object — without modifying the old one.
 

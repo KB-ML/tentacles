@@ -94,7 +94,7 @@ useUnit(form.contacts.$at(0))   // FormRowShape<Contact> | null
 </Each>
 
 // Imperative lookup by __rowId
-form.contacts.instance(rowId)   // from the model-API spread
+form.contacts.get(rowId)   // from the model-API spread
 ```
 
 ## Per-row reset vs array-level `clear`

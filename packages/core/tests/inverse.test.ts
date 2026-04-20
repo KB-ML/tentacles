@@ -19,12 +19,14 @@ function makeTeamPlayerModels() {
     .inverse("roster", "team")
     .pk("id");
 
-  const playerModel = createModel({ contract: playerContract });
-  const teamModel = createModel({ contract: teamContract });
+  const playerModel = createModel({ contract: playerContract,
+    refs: { team: () => teamModel },
+  });
+  const teamModel = createModel({ contract: teamContract,
+    refs: { roster: () => playerModel },
+  });
 
-  playerModel.bind({ team: () => teamModel });
-  teamModel.bind({ roster: () => playerModel });
-
+  
   return { playerModel, teamModel };
 }
 
@@ -42,7 +44,7 @@ describe("Inverse: basic ref.one → inverse.many", () => {
 
     const roster = team.$roster.getState();
     expect(roster).toHaveLength(1);
-    expect(roster[0].__id).toBe("p1");
+    expect(roster[0]).toBe("p1");
   });
 
   it("inverse updates on ref.clear", () => {
@@ -70,7 +72,7 @@ describe("Inverse: basic ref.one → inverse.many", () => {
     p1.team.set("t2");
     expect(t1.$roster.getState()).toHaveLength(0);
     expect(t2.$roster.getState()).toHaveLength(1);
-    expect(t2.$roster.getState()[0].__id).toBe("p1");
+    expect(t2.$roster.getState()[0]).toBe("p1");
   });
 
   it("multiple players on one team", () => {
@@ -84,7 +86,7 @@ describe("Inverse: basic ref.one → inverse.many", () => {
 
     const roster = team.$roster.getState();
     expect(roster).toHaveLength(2);
-    const ids = roster.map((p: any) => p.__id).sort();
+    const ids = roster.slice().sort();
     expect(ids).toEqual(["p1", "p2"]);
   });
 
@@ -107,7 +109,7 @@ describe("Inverse: basic ref.one → inverse.many", () => {
     playerModel.create({ id: "p1", name: "Alice", team: "t1" });
 
     expect(team.$roster.getState()).toHaveLength(1);
-    expect(team.$roster.getState()[0].__id).toBe("p1");
+    expect(team.$roster.getState()[0]).toBe("p1");
   });
 });
 
@@ -141,12 +143,14 @@ describe("Inverse: ref.many → inverse.many", () => {
       .inverse("playlists", "songs")
       .pk("id");
 
-    const playlistModel = createModel({ contract: playlistContract });
-    const songModel = createModel({ contract: songContract });
+    const playlistModel = createModel({ contract: playlistContract,
+    refs: { songs: () => songModel },
+  });
+    const songModel = createModel({ contract: songContract,
+    refs: { playlists: () => playlistModel },
+  });
 
-    playlistModel.bind({ songs: () => songModel });
-    songModel.bind({ playlists: () => playlistModel });
-
+      
     const s1 = songModel.create({ id: "s1", title: "Song A" });
     const s2 = songModel.create({ id: "s2", title: "Song B" });
     const pl1 = playlistModel.create({ id: "pl1", name: "Mix 1" });
@@ -159,17 +163,17 @@ describe("Inverse: ref.many → inverse.many", () => {
     // s1 is in both playlists
     const s1Playlists = s1.$playlists.getState();
     expect(s1Playlists).toHaveLength(2);
-    const plIds = s1Playlists.map((p: any) => p.__id).sort();
+    const plIds = s1Playlists.slice().sort();
     expect(plIds).toEqual(["pl1", "pl2"]);
 
     // s2 is only in pl1
     expect(s2.$playlists.getState()).toHaveLength(1);
-    expect(s2.$playlists.getState()[0].__id).toBe("pl1");
+    expect(s2.$playlists.getState()[0]).toBe("pl1");
 
     // Remove s1 from pl2
     pl2.songs.remove("s1");
     expect(s1.$playlists.getState()).toHaveLength(1);
-    expect(s1.$playlists.getState()[0].__id).toBe("pl1");
+    expect(s1.$playlists.getState()[0]).toBe("pl1");
   });
 });
 
@@ -194,11 +198,11 @@ describe("Inverse: self-reference", () => {
 
     // child1's parents should be [root]
     expect(child1.$parents.getState()).toHaveLength(1);
-    expect(child1.$parents.getState()[0].__id).toBe("root");
+    expect(child1.$parents.getState()[0]).toBe("root");
 
     // child2's parents should be [root]
     expect(child2.$parents.getState()).toHaveLength(1);
-    expect(child2.$parents.getState()[0].__id).toBe("root");
+    expect(child2.$parents.getState()[0]).toBe("root");
 
     // root has no parents
     expect(root.$parents.getState()).toHaveLength(0);
@@ -221,12 +225,17 @@ describe("Inverse: multiple refs to same target", () => {
       .inverse("createdTasks", "createdBy")
       .pk("id");
 
-    const taskModel = createModel({ contract: taskContract });
-    const userModel = createModel({ contract: userContract });
+    // biome-ignore lint: intentional forward reference via thunk
+    const taskModel: ReturnType<typeof createModel<typeof taskContract>> = createModel({
+      contract: taskContract,
+      refs: { assignedTo: () => userModel, createdBy: () => userModel },
+    });
+    const userModel: ReturnType<typeof createModel<typeof userContract>> = createModel({
+      contract: userContract,
+      refs: { assignedTasks: () => taskModel, createdTasks: () => taskModel },
+    });
 
-    taskModel.bind({ assignedTo: () => userModel, createdBy: () => userModel });
-    userModel.bind({ assignedTasks: () => taskModel, createdTasks: () => taskModel });
-
+      
     const alice = userModel.create({ id: "u1", name: "Alice" });
     const bob = userModel.create({ id: "u2", name: "Bob" });
 
@@ -259,12 +268,14 @@ describe("Inverse: backfill", () => {
       .inverse("roster", "team")
       .pk("id");
 
-    const playerModel = createModel({ contract: playerContract });
-    const teamModel = createModel({ contract: teamContract });
+    const playerModel = createModel({ contract: playerContract,
+    refs: { team: () => teamModel },
+  });
+    const teamModel = createModel({ contract: teamContract,
+    refs: { roster: () => playerModel },
+  });
 
-    playerModel.bind({ team: () => teamModel });
-    teamModel.bind({ roster: () => playerModel });
-
+      
     // Create players BEFORE any team instance (inverses not yet resolved)
     const p1 = playerModel.create({ id: "p1", name: "Alice" });
     const p2 = playerModel.create({ id: "p2", name: "Bob" });
@@ -295,7 +306,7 @@ describe("Inverse: late wiring — ref.one mutations after backfill", () => {
     // Mutate ref AFTER inverse is registered
     p1.team.set("t1");
     expect(team.$roster.getState()).toHaveLength(1);
-    expect(team.$roster.getState()[0].__id).toBe("p1");
+    expect(team.$roster.getState()[0]).toBe("p1");
   });
 
   it("ref.clear after late inverse registration updates inverse", () => {
@@ -346,7 +357,7 @@ describe("Inverse: late wiring — ref.one mutations after backfill", () => {
 
     p2.team.clear();
     expect(team.$roster.getState()).toHaveLength(2);
-    const ids = team.$roster.getState().map((p: { __id: string }) => p.__id).sort();
+    const ids = team.$roster.getState().slice().sort();
     expect(ids).toEqual(["p1", "p3"]);
   });
 });
@@ -365,12 +376,14 @@ describe("Inverse: late wiring — ref.many mutations after backfill", () => {
       .inverse("playlists", "songs")
       .pk("id");
 
-    const playlistModel = createModel({ contract: playlistContract });
-    const songModel = createModel({ contract: songContract });
+    const playlistModel = createModel({ contract: playlistContract,
+    refs: { songs: () => songModel },
+  });
+    const songModel = createModel({ contract: songContract,
+    refs: { playlists: () => playlistModel },
+  });
 
-    playlistModel.bind({ songs: () => songModel });
-    songModel.bind({ playlists: () => playlistModel });
-
+      
     return { playlistModel, songModel };
   }
 
@@ -387,7 +400,7 @@ describe("Inverse: late wiring — ref.many mutations after backfill", () => {
     // Mutate ref AFTER inverse is registered
     pl.songs.add("s1");
     expect(s1.$playlists.getState()).toHaveLength(1);
-    expect(s1.$playlists.getState()[0].__id).toBe("pl1");
+    expect(s1.$playlists.getState()[0]).toBe("pl1");
   });
 
   it("ref.remove after late inverse registration updates inverse", () => {
@@ -415,12 +428,12 @@ describe("Inverse: late wiring — ref.many mutations after backfill", () => {
     pl2.songs.add("s1");
 
     expect(s1.$playlists.getState()).toHaveLength(2);
-    const plIds = s1.$playlists.getState().map((p: { __id: string }) => p.__id).sort();
+    const plIds = s1.$playlists.getState().slice().sort();
     expect(plIds).toEqual(["pl1", "pl2"]);
 
     pl1.songs.remove("s1");
     expect(s1.$playlists.getState()).toHaveLength(1);
-    expect(s1.$playlists.getState()[0].__id).toBe("pl2");
+    expect(s1.$playlists.getState()[0]).toBe("pl2");
   });
 });
 
@@ -467,7 +480,7 @@ describe("Inverse: late wiring — self-referencing model", () => {
     // Mutate AFTER both exist
     root.children.add("c1");
     expect(child.$parents.getState()).toHaveLength(1);
-    expect(child.$parents.getState()[0].__id).toBe("root");
+    expect(child.$parents.getState()[0]).toBe("root");
 
     root.children.remove("c1");
     expect(child.$parents.getState()).toHaveLength(0);
@@ -492,12 +505,14 @@ describe("Inverse: late wiring SSR", () => {
       .inverse("roster", "team")
       .pk("id");
 
-    const playerModel = createModel({ contract: playerContract });
-    const teamModel = createModel({ contract: teamContract });
+    const playerModel = createModel({ contract: playerContract,
+    refs: { team: () => teamModel },
+  });
+    const teamModel = createModel({ contract: teamContract,
+    refs: { roster: () => playerModel },
+  });
 
-    playerModel.bind({ team: () => teamModel });
-    teamModel.bind({ roster: () => playerModel });
-
+      
     // Create globally (late wiring path)
     const p1 = playerModel.create({ id: "ssrlw-p1", name: "Alice" });
     const team = teamModel.create({ id: "ssrlw-t1", name: "Red" });
@@ -505,7 +520,7 @@ describe("Inverse: late wiring SSR", () => {
 
     // Verify the inverse resolves correctly at the global level
     expect(team.$roster.getState()).toHaveLength(1);
-    expect(team.$roster.getState()[0].__id).toBe("ssrlw-p1");
+    expect(team.$roster.getState()[0]).toBe("ssrlw-p1");
   });
 });
 
@@ -550,9 +565,10 @@ describe("Inverse: validation", () => {
       .inverse("bad", "nonexistent")
       .pk("id");
 
-    const targetModel = createModel({ contract: targetContract });
-    targetModel.bind({ bad: () => sourceModel });
-
+    const targetModel = createModel({ contract: targetContract,
+    refs: { bad: () => sourceModel },
+  });
+   
     expect(() => targetModel.create({ id: "x" })).toThrow(/no ref field "nonexistent"/);
   });
 });

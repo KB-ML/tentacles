@@ -34,12 +34,14 @@ function makeTeamPlayerModels(namespace: string) {
     .inverse("roster", "team")
     .pk("id");
 
-  const playerModel = createModel({ contract: playerContract, name: `${namespace}-player` });
-  const teamModel = createModel({ contract: teamContract, name: `${namespace}-team` });
+  const playerModel = createModel({ contract: playerContract, name: `${namespace}-player`,
+    refs: { team: () => teamModel },
+  });
+  const teamModel = createModel({ contract: teamContract, name: `${namespace}-team`,
+    refs: { roster: () => playerModel },
+  });
 
-  playerModel.bind({ team: () => teamModel });
-  teamModel.bind({ roster: () => playerModel });
-
+  
   return { playerModel, teamModel };
 }
 
@@ -72,18 +74,18 @@ describe("Phase 5b — inverse refs over SSR-hydrated fork({values})", () => {
     wipeGlobalCache(playerModel);
     wipeGlobalCache(teamModel);
 
-    const team1 = clientScope.getState(teamModel.instance("t1"));
-    const team2 = clientScope.getState(teamModel.instance("t2"));
+    const team1 = teamModel.getSync("t1", clientScope);
+    const team2 = teamModel.getSync("t2", clientScope);
     expect(team1).not.toBeNull();
     expect(team2).not.toBeNull();
 
     const t1Ids = clientScope
       .getState(team1!.$roster)
-      .map((p: { __id: string }) => p.__id)
+      .slice()
       .sort();
     const t2Ids = clientScope
       .getState(team2!.$roster)
-      .map((p: { __id: string }) => p.__id)
+      .slice()
       .sort();
 
     expect(t1Ids).toEqual(["p1", "p2"]);
@@ -112,7 +114,7 @@ describe("Phase 5b — inverse refs over SSR-hydrated fork({values})", () => {
     wipeGlobalCache(playerModel);
     wipeGlobalCache(teamModel);
 
-    const team2 = clientScope.getState(teamModel.instance("t2"));
+    const team2 = teamModel.getSync("t2", clientScope);
     expect(team2).not.toBeNull();
     expect(clientScope.getState(team2!.$roster)).toEqual([]);
   });
@@ -153,18 +155,18 @@ describe("Phase 5b — inverse refs over SSR-hydrated fork({values})", () => {
     wipeGlobalCache(playerModel);
     wipeGlobalCache(teamModel);
 
-    const teamA = clientA.getState(teamModel.instance("t1"));
-    const teamB = clientB.getState(teamModel.instance("t1"));
+    const teamA = teamModel.getSync("t1", clientA);
+    const teamB = teamModel.getSync("t1", clientB);
     expect(teamA).not.toBeNull();
     expect(teamB).not.toBeNull();
 
     const aIds = clientA
       .getState(teamA!.$roster)
-      .map((p: { __id: string }) => p.__id)
+      .slice()
       .sort();
     const bIds = clientB
       .getState(teamB!.$roster)
-      .map((p: { __id: string }) => p.__id)
+      .slice()
       .sort();
 
     expect(aIds).toEqual(["p1"]);
@@ -184,11 +186,13 @@ describe("Phase 5b — inverse refs over SSR-hydrated fork({values})", () => {
       .inverse("playlists", "songs")
       .pk("id");
 
-    const playlistModel = createModel({ contract: playlistContract, name: "phase5b-m2m-pl" });
-    const songModel = createModel({ contract: songContract, name: "phase5b-m2m-sg" });
-    playlistModel.bind({ songs: () => songModel });
-    songModel.bind({ playlists: () => playlistModel });
-
+    const playlistModel = createModel({ contract: playlistContract, name: "phase5b-m2m-pl",
+    refs: { songs: () => songModel },
+  });
+    const songModel = createModel({ contract: songContract, name: "phase5b-m2m-sg",
+    refs: { playlists: () => playlistModel },
+  });
+      
     const serverScope = fork();
     await allSettled(songModel.createManyFx, {
       scope: serverScope,
@@ -211,18 +215,18 @@ describe("Phase 5b — inverse refs over SSR-hydrated fork({values})", () => {
     wipeGlobalCache(playlistModel);
     wipeGlobalCache(songModel);
 
-    const s1 = clientScope.getState(songModel.instance("s1"));
-    const s2 = clientScope.getState(songModel.instance("s2"));
+    const s1 = songModel.getSync("s1", clientScope);
+    const s2 = songModel.getSync("s2", clientScope);
     expect(s1).not.toBeNull();
     expect(s2).not.toBeNull();
 
     const s1Playlists = clientScope
       .getState(s1!.$playlists)
-      .map((p: { __id: string }) => p.__id)
+      .slice()
       .sort();
     const s2Playlists = clientScope
       .getState(s2!.$playlists)
-      .map((p: { __id: string }) => p.__id)
+      .slice()
       .sort();
 
     expect(s1Playlists).toEqual(["pl1", "pl2"]);

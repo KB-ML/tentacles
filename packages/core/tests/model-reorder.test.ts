@@ -28,9 +28,9 @@ describe("model.reorder", () => {
     expect(model.$count.getState()).toBe(3);
 
     // Instances still exist and have correct values
-    expect(model.instance("a").getState()?.$value.getState()).toBe(1);
-    expect(model.instance("b").getState()?.$value.getState()).toBe(2);
-    expect(model.instance("c").getState()?.$value.getState()).toBe(3);
+    expect(model.get("a")?.$value.getState()).toBe(1);
+    expect(model.get("b")?.$value.getState()).toBe(2);
+    expect(model.get("c")?.$value.getState()).toBe(3);
   });
 
   it("$instances reflects new order", () => {
@@ -42,7 +42,7 @@ describe("model.reorder", () => {
 
     model.reorder(["z", "x", "y"]);
 
-    const instances = model.$instances.getState();
+    const instances = model.instances();
     expect(instances.map((i) => i.__id)).toEqual(["z", "x", "y"]);
     expect(instances.map((i) => i.$value.getState())).toEqual([30, 10, 20]);
   });

@@ -1,6 +1,6 @@
 import { createViewContract, eq } from "@kbml-tentacles/core";
 import { sample } from "effector";
-import { todoModel } from "./todo";
+import { todoModel } from "./index";
 import { todoFormViewModel } from "./todo-form-view-model";
 
 function resolveCategory(values: {

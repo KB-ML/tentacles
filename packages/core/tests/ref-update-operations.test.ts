@@ -31,9 +31,10 @@ describe("update: one ref connect", () => {
       .store("categoryId", (s) => s<number>())
       .ref("category", "one", { fk: "categoryId" })
       .pk("id");
-    const todoModel = createModel({ contract: todoContract, name: "con1-todo" });
-    todoModel.bind({ category: () => catModel });
-
+    const todoModel = createModel({ contract: todoContract, name: "con1-todo",
+    refs: { category: () => catModel },
+  });
+   
     catModel.create({ id: 1, title: "Work" });
     catModel.create({ id: 2, title: "Personal" });
     const todo = todoModel.create({ id: 1, title: "Task", categoryId: 1 });
@@ -56,9 +57,10 @@ describe("update: one ref connect", () => {
       .store("title", (s) => s<string>())
       .ref("category", "one")
       .pk("id");
-    const todoModel = createModel({ contract: todoContract, name: "con2-todo" });
-    todoModel.bind({ category: () => catModel });
-
+    const todoModel = createModel({ contract: todoContract, name: "con2-todo",
+    refs: { category: () => catModel },
+  });
+   
     todoModel.create({ id: 1, title: "Task" });
 
     expect(() => {
@@ -84,9 +86,10 @@ describe("update: one ref create", () => {
       .store("title", (s) => s<string>())
       .ref("category", "one")
       .pk("id");
-    const todoModel = createModel({ contract: todoContract, name: "cre1-todo" });
-    todoModel.bind({ category: () => catModel });
-
+    const todoModel = createModel({ contract: todoContract, name: "cre1-todo",
+    refs: { category: () => catModel },
+  });
+   
     const todo = todoModel.create({ id: 1, title: "Task" });
 
     todoModel.update(1, { category: { create: { id: 5, title: "New Category" } } });
@@ -114,9 +117,10 @@ describe("update: one ref connectOrCreate", () => {
       .store("title", (s) => s<string>())
       .ref("category", "one")
       .pk("id");
-    const todoModel = createModel({ contract: todoContract, name: "coc1-todo" });
-    todoModel.bind({ category: () => catModel });
-
+    const todoModel = createModel({ contract: todoContract, name: "coc1-todo",
+    refs: { category: () => catModel },
+  });
+   
     catModel.create({ id: 3, title: "Existing" });
     const todo = todoModel.create({ id: 1, title: "Task" });
 
@@ -140,9 +144,10 @@ describe("update: one ref connectOrCreate", () => {
       .store("title", (s) => s<string>())
       .ref("category", "one")
       .pk("id");
-    const todoModel = createModel({ contract: todoContract, name: "coc2-todo" });
-    todoModel.bind({ category: () => catModel });
-
+    const todoModel = createModel({ contract: todoContract, name: "coc2-todo",
+    refs: { category: () => catModel },
+  });
+   
     const todo = todoModel.create({ id: 1, title: "Task" });
 
     todoModel.update(1, { category: { connectOrCreate: { id: 99, title: "Brand New" } } });
@@ -171,9 +176,10 @@ describe("update: one ref disconnect", () => {
       .store("categoryId", (s) => s<number>())
       .ref("category", "one", { fk: "categoryId" })
       .pk("id");
-    const todoModel = createModel({ contract: todoContract, name: "dis1-todo" });
-    todoModel.bind({ category: () => catModel });
-
+    const todoModel = createModel({ contract: todoContract, name: "dis1-todo",
+    refs: { category: () => catModel },
+  });
+   
     catModel.create({ id: 1, title: "Work" });
     const todo = todoModel.create({ id: 1, title: "Task", categoryId: 1 });
     todo.category.set(1);
@@ -201,9 +207,10 @@ describe("update: many ref set", () => {
       .store("title", (s) => s<string>())
       .ref("tags", "many")
       .pk("id");
-    const postModel = createModel({ contract: postContract, name: "set-post" });
-    postModel.bind({ tags: () => tagModel });
-
+    const postModel = createModel({ contract: postContract, name: "set-post",
+    refs: { tags: () => tagModel },
+  });
+   
     return { tagModel, postModel };
   }
 
@@ -277,9 +284,10 @@ describe("update: many ref add", () => {
       .store("title", (s) => s<string>())
       .ref("tags", "many")
       .pk("id");
-    const postModel = createModel({ contract: postContract, name: "add-post" });
-    postModel.bind({ tags: () => tagModel });
-
+    const postModel = createModel({ contract: postContract, name: "add-post",
+    refs: { tags: () => tagModel },
+  });
+   
     return { tagModel, postModel };
   }
 
@@ -331,9 +339,10 @@ describe("update: many ref disconnect", () => {
       .store("title", (s) => s<string>())
       .ref("tags", "many")
       .pk("id");
-    const postModel = createModel({ contract: postContract, name: "disc-post" });
-    postModel.bind({ tags: () => tagModel });
-
+    const postModel = createModel({ contract: postContract, name: "disc-post",
+    refs: { tags: () => tagModel },
+  });
+   
     return { tagModel, postModel };
   }
 
@@ -389,9 +398,10 @@ describe("update: FK ↔ ref sync", () => {
       .store("categoryId", (s) => s<number>())
       .ref("category", "one", { fk: "categoryId" })
       .pk("id");
-    const todoModel = createModel({ contract: todoContract, name: "fk1-todo" });
-    todoModel.bind({ category: () => catModel });
-
+    const todoModel = createModel({ contract: todoContract, name: "fk1-todo",
+    refs: { category: () => catModel },
+  });
+   
     catModel.create({ id: 1, title: "Work" });
     catModel.create({ id: 2, title: "Personal" });
     const todo = todoModel.create({ id: 1, title: "Task", categoryId: 1 });
@@ -416,9 +426,10 @@ describe("update: FK ↔ ref sync", () => {
       .store("categoryId", (s) => s<number>())
       .ref("category", "one", { fk: "categoryId" })
       .pk("id");
-    const todoModel = createModel({ contract: todoContract, name: "fk2-todo" });
-    todoModel.bind({ category: () => catModel });
-
+    const todoModel = createModel({ contract: todoContract, name: "fk2-todo",
+    refs: { category: () => catModel },
+  });
+   
     catModel.create({ id: 1, title: "Work" });
     catModel.create({ id: 2, title: "Personal" });
     const todo = todoModel.create({ id: 1, title: "Task", categoryId: 1 });
@@ -448,9 +459,10 @@ describe("update: inverse ref operations", () => {
       .store("title", (s) => s<string>())
       .inverse("category", "todos")
       .pk("id");
-    const todoModel = createModel({ contract: todoContract, name: "inv-todo" });
-    todoModel.bind({ category: () => categoryModel });
-
+    const todoModel = createModel({ contract: todoContract, name: "inv-todo",
+    refs: { category: () => categoryModel },
+  });
+   
     return { categoryModel, todoModel };
   }
 
@@ -498,9 +510,10 @@ describe("query.update with ref operations", () => {
       .store("categoryId", (s) => s<number>())
       .ref("category", "one", { fk: "categoryId" })
       .pk("id");
-    const todoModel = createModel({ contract: todoContract, name: "qu1-todo" });
-    todoModel.bind({ category: () => catModel });
-
+    const todoModel = createModel({ contract: todoContract, name: "qu1-todo",
+    refs: { category: () => catModel },
+  });
+   
     catModel.create({ id: 1, title: "Work" });
     catModel.create({ id: 2, title: "Personal" });
 
@@ -532,9 +545,10 @@ describe("update: model with only id", () => {
       .store("id", (s) => s<string>())
       .ref("target", "one")
       .pk("id");
-    const parentModel = createModel({ contract: parentContract, name: "oid1-parent" });
-    parentModel.bind({ target: () => simpleModel });
-
+    const parentModel = createModel({ contract: parentContract, name: "oid1-parent",
+    refs: { target: () => simpleModel },
+  });
+   
     const parent = parentModel.create({ id: "p1" });
 
     parentModel.update("p1", { target: { connectOrCreate: { id: 42 } } });
@@ -554,9 +568,10 @@ describe("update: model with only id", () => {
       .store("id", (s) => s<string>())
       .ref("target", "one")
       .pk("id");
-    const parentModel = createModel({ contract: parentContract, name: "oid2-parent" });
-    parentModel.bind({ target: () => simpleModel });
-
+    const parentModel = createModel({ contract: parentContract, name: "oid2-parent",
+    refs: { target: () => simpleModel },
+  });
+   
     simpleModel.create({ id: 7 });
     const parent = parentModel.create({ id: "p1" });
 
@@ -585,9 +600,10 @@ describe("update: mixed store + ref update", () => {
       .store("categoryId", (s) => s<number>())
       .ref("category", "one", { fk: "categoryId" })
       .pk("id");
-    const todoModel = createModel({ contract: todoContract, name: "mix1-todo" });
-    todoModel.bind({ category: () => catModel });
-
+    const todoModel = createModel({ contract: todoContract, name: "mix1-todo",
+    refs: { category: () => catModel },
+  });
+   
     catModel.create({ id: 1, title: "Work" });
     catModel.create({ id: 2, title: "Personal" });
     const todo = todoModel.create({ id: 1, title: "Old Title", categoryId: 1 });
@@ -617,9 +633,10 @@ describe("update: plain object shortcut", () => {
       .store("title", (s) => s<string>())
       .ref("category", "one")
       .pk("id");
-    const todoModel = createModel({ contract: todoContract, name: "ups1-todo" });
-    todoModel.bind({ category: () => catModel });
-
+    const todoModel = createModel({ contract: todoContract, name: "ups1-todo",
+    refs: { category: () => catModel },
+  });
+   
     const todo = todoModel.create({ id: 1, title: "Task" });
 
     // Creates category (doesn't exist yet)
@@ -644,9 +661,10 @@ describe("update: plain object shortcut", () => {
       .store("title", (s) => s<string>())
       .ref("tags", "many")
       .pk("id");
-    const postModel = createModel({ contract: postContract, name: "ups2-post" });
-    postModel.bind({ tags: () => tagModel });
-
+    const postModel = createModel({ contract: postContract, name: "ups2-post",
+    refs: { tags: () => tagModel },
+  });
+   
     const post = postModel.create({ id: "p1", title: "Hello" });
     tagModel.create({ id: "t1", label: "existing" });
     post.tags.add("t1");
@@ -678,9 +696,10 @@ describe("create: one ref operations", () => {
       .store("title", (s) => s<string>())
       .ref("category", "one")
       .pk("id");
-    const todoModel = createModel({ contract: todoContract, name: "cc1-todo" });
-    todoModel.bind({ category: () => catModel });
-
+    const todoModel = createModel({ contract: todoContract, name: "cc1-todo",
+    refs: { category: () => catModel },
+  });
+   
     catModel.create({ id: 1, title: "Work" });
 
     const todo = todoModel.create({ id: 1, title: "Task", category: { connect: 1 } });
@@ -700,9 +719,10 @@ describe("create: one ref operations", () => {
       .store("title", (s) => s<string>())
       .ref("category", "one")
       .pk("id");
-    const todoModel = createModel({ contract: todoContract, name: "cc2-todo" });
-    todoModel.bind({ category: () => catModel });
-
+    const todoModel = createModel({ contract: todoContract, name: "cc2-todo",
+    refs: { category: () => catModel },
+  });
+   
     expect(() => {
       todoModel.create({ id: 1, title: "Task", category: { connect: 999 } });
     }).toThrow(/not found/);
@@ -720,9 +740,10 @@ describe("create: one ref operations", () => {
       .store("title", (s) => s<string>())
       .ref("category", "one")
       .pk("id");
-    const todoModel = createModel({ contract: todoContract, name: "cc3-todo" });
-    todoModel.bind({ category: () => catModel });
-
+    const todoModel = createModel({ contract: todoContract, name: "cc3-todo",
+    refs: { category: () => catModel },
+  });
+   
     const todo = todoModel.create({
       id: 1,
       title: "Task",
@@ -745,9 +766,10 @@ describe("create: one ref operations", () => {
       .store("title", (s) => s<string>())
       .ref("category", "one")
       .pk("id");
-    const todoModel = createModel({ contract: todoContract, name: "cc4-todo" });
-    todoModel.bind({ category: () => catModel });
-
+    const todoModel = createModel({ contract: todoContract, name: "cc4-todo",
+    refs: { category: () => catModel },
+  });
+   
     catModel.create({ id: 3, title: "Existing" });
 
     // Connects to existing
@@ -781,9 +803,10 @@ describe("create: one ref operations", () => {
       .store("title", (s) => s<string>())
       .ref("category", "one")
       .pk("id");
-    const todoModel = createModel({ contract: todoContract, name: "cc5-todo" });
-    todoModel.bind({ category: () => catModel });
-
+    const todoModel = createModel({ contract: todoContract, name: "cc5-todo",
+    refs: { category: () => catModel },
+  });
+   
     // Plain object = connectOrCreate (creates if not exists)
     const todo = todoModel.create({ id: 1, title: "Task", category: { id: 7, title: "Inline" } });
     expect(todo.category.$id.getState()).toBe("7");
@@ -810,9 +833,10 @@ describe("create: many ref operations", () => {
       .store("title", (s) => s<string>())
       .ref("tags", "many")
       .pk("id");
-    const postModel = createModel({ contract: postContract, name: "cm1-post" });
-    postModel.bind({ tags: () => tagModel });
-
+    const postModel = createModel({ contract: postContract, name: "cm1-post",
+    refs: { tags: () => tagModel },
+  });
+   
     tagModel.create({ id: "t1", label: "existing" });
 
     const post = postModel.create({
@@ -851,9 +875,10 @@ describe("create: many ref operations", () => {
       .store("title", (s) => s<string>())
       .ref("tags", "many")
       .pk("id");
-    const postModel = createModel({ contract: postContract, name: "cm2-post" });
-    postModel.bind({ tags: () => tagModel });
-
+    const postModel = createModel({ contract: postContract, name: "cm2-post",
+    refs: { tags: () => tagModel },
+  });
+   
     // First call: creates all tags
     const post = postModel.create({
       id: "p1",
@@ -898,9 +923,10 @@ describe("connect with object", () => {
       .store("title", (s) => s<string>())
       .ref("category", "one")
       .pk("id");
-    const todoModel = createModel({ contract: todoContract, name: "cobj1-todo" });
-    todoModel.bind({ category: () => catModel });
-
+    const todoModel = createModel({ contract: todoContract, name: "cobj1-todo",
+    refs: { category: () => catModel },
+  });
+   
     catModel.create({ id: 1, title: "Work" });
 
     const todo = todoModel.create({
@@ -931,9 +957,10 @@ describe("compound PK with FK ref", () => {
       .store("categoryId", (s) => s<number>())
       .ref("category", "one", { fk: "categoryId" })
       .pk("categoryId", "id");
-    const todoModel = createModel({ contract: todoContract, name: "cpk1-todo" });
-    todoModel.bind({ category: () => catModel });
-
+    const todoModel = createModel({ contract: todoContract, name: "cpk1-todo",
+    refs: { category: () => catModel },
+  });
+   
     catModel.create({ id: 1, title: "Work" });
 
     // Pass ref operation instead of FK value — PK should still resolve
@@ -962,9 +989,10 @@ describe("compound PK with FK ref", () => {
       .store("categoryId", (s) => s<number>())
       .ref("category", "one", { fk: "categoryId" })
       .pk("categoryId", "id");
-    const todoModel = createModel({ contract: todoContract, name: "cpk2-todo" });
-    todoModel.bind({ category: () => catModel });
-
+    const todoModel = createModel({ contract: todoContract, name: "cpk2-todo",
+    refs: { category: () => catModel },
+  });
+   
     catModel.create({ id: 2, title: "Personal" });
 
     const todo = todoModel.create({
@@ -991,9 +1019,10 @@ describe("create: inverse ref operations", () => {
       .store("title", (s) => s<string>())
       .inverse("category", "todos")
       .pk("id");
-    const todoModel = createModel({ contract: todoContract, name: "ci1-todo" });
-    todoModel.bind({ category: () => categoryModel });
-
+    const todoModel = createModel({ contract: todoContract, name: "ci1-todo",
+    refs: { category: () => categoryModel },
+  });
+   
     const cat = categoryModel.create({ id: "cat-1", name: "Work" });
 
     todoModel.create({ id: "t1", title: "Task", category: { connect: "cat-1" } });
@@ -1014,9 +1043,10 @@ describe("create: inverse ref operations", () => {
       .store("title", (s) => s<string>())
       .inverse("category", "todos")
       .pk("id");
-    const todoModel = createModel({ contract: todoContract, name: "ci2-todo" });
-    todoModel.bind({ category: () => categoryModel });
-
+    const todoModel = createModel({ contract: todoContract, name: "ci2-todo",
+    refs: { category: () => categoryModel },
+  });
+   
     todoModel.create({
       id: "t1",
       title: "Task",

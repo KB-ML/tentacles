@@ -58,7 +58,7 @@ export type CreateData<
   ContractModelInverseData<Contract>;
 
 /** Fields that need model binding: unbound refs (no inline thunk) + inverses */
-type BindableFieldNames<
+export type BindableFieldNames<
   Contract extends Record<string, ContractEntity<ContractFieldKind, unknown>>,
 > = {
   [K in keyof Contract]: Contract[K] extends ContractRef<any, any>
@@ -71,26 +71,36 @@ type BindableFieldNames<
 }[keyof Contract] &
   string;
 
-type BindConfig<Contract extends Record<string, ContractEntity<ContractFieldKind, unknown>>> =
+/** Strictly-keyed refs config for `createModel({ refs: ... })`.
+ *  Each ref/inverse field must be paired with a thunk returning the target model. */
+export type RefsConfig<
+  Contract extends Record<string, ContractEntity<ContractFieldKind, unknown>>,
+> =
   BindableFieldNames<Contract> extends never
     ? Record<string, never>
-    : { [K in BindableFieldNames<Contract>]: (() => Model<any, any, any, any>) | undefined };
+    : { [K in BindableFieldNames<Contract>]: () => Model<any, any, any, any> };
 
-/** Replaces ContractRef target model types with actual bound model types from .bind() config */
+/** Type-level transform applied to the contract from the `refs` config passed to `createModel`.
+ *
+ *  Kept as identity by design. A substituting implementation (replacing each
+ *  `ContractRef`/`ContractInverse` field's phantom target with the actual target model type)
+ *  was attempted and rejected: it produces TS2615 / TS7022 / TS7023 at the user site whenever
+ *  two models reference each other (A ↔ B). The generic inference cycle is fundamental —
+ *  inferring `Refs` for A requires `typeof B`, whose `Refs` inference requires `typeof A`.
+ *
+ *  For cases where you need a narrowed type for an inverse or ref field, use the
+ *  `InferInverseOf<TargetModel>` / `InferInstance<TargetModel>` helpers at the access site.
+ */
+export type ApplyRefs<
+  Contract extends Record<string, ContractEntity<ContractFieldKind, unknown>>,
+  _R,
+> = Contract;
+
+/** Backwards-compat alias — the `refs` option replaces `.bind()`. */
 export type ApplyBind<
   Contract extends Record<string, ContractEntity<ContractFieldKind, unknown>>,
-  B,
-> = {
-  [K in keyof Contract]: K extends keyof B
-    ? B[K] extends () => infer M
-      ? Contract[K] extends ContractRef<infer C, any, infer FK>
-        ? M extends Model<any, any, any, any>
-          ? ContractRef<C, M, FK>
-          : Contract[K]
-        : Contract[K]
-      : Contract[K]
-    : Contract[K];
-};
+  R,
+> = ApplyRefs<Contract, R>;
 
 type FullInstance<
   Contract extends Record<string, ContractEntity<ContractFieldKind, unknown>>,
@@ -267,8 +277,25 @@ export class Model<
   public get $count() {
     return this.registry.$count;
   }
-  public get $instances() {
-    return this.registry.$instances;
+  public get $idSet() {
+    return this.registry.$idSet;
+  }
+
+  /**
+   * Reactive scalar boolean store: `true` if the given id (or compound key)
+   * is present in `$ids`. Memoized per id. Use this in component bindings
+   * instead of `$idSet` to avoid unnecessary re-renders — effector's default
+   * equality suppresses duplicate boolean emissions, whereas `$idSet` emits
+   * a fresh Set reference on every upstream `$ids` emission.
+   */
+  public has(id: ModelInstanceId): Store<boolean>;
+  public has(...parts: [string | number, string | number, ...(string | number)[]]): Store<boolean>;
+  public has(...args: (string | number)[]): Store<boolean> {
+    const id =
+      args.length === 1
+        ? String(args[0])
+        : args.map(String).join(InstanceCache.COMPOUND_PK_DELIMITER);
+    return this.registry.has(id);
   }
   public get reorder() {
     return this.registry.reorder;
@@ -328,7 +355,23 @@ export class Model<
     private readonly sidRoot?: string,
     private readonly factoryDefaults?: Record<string, (data: Record<string, unknown>) => unknown>,
     private readonly _noUserFn?: boolean,
+    refs?: Record<string, () => Model<any, any, any, any>>,
   ) {
+    // Wire refs config eagerly (thunks stay lazy — invoked only on first resolution)
+    if (refs) {
+      for (const [key, thunk] of Object.entries(refs)) {
+        if (!thunk) continue;
+        const entity = contract[key];
+        if (!entity) continue;
+        if (entity.kind === ContractFieldKind.Ref) {
+          if (!this.refTargets) this.refTargets = {};
+          this.refTargets[key] = thunk as () => Model<any, any>;
+        } else if (entity.kind === ContractFieldKind.Inverse) {
+          if (!this.inverseSources) this.inverseSources = {};
+          this.inverseSources[key] = thunk as () => Model<any, any>;
+        }
+      }
+    }
     this.cache = new InstanceCache();
     this.contractKeys = Object.keys(contract);
 
@@ -344,11 +387,7 @@ export class Model<
 
     this.scopeManager = new ScopeManager(contract);
 
-    this.refApiFactory = new RefApiFactory(
-      (id) => this.getInstanceOrReconstruct(id),
-      Model.sidRegistry,
-      () => this._dataMapFieldUpdated,
-    );
+    this.refApiFactory = new RefApiFactory(Model.sidRegistry, () => this._dataMapFieldUpdated);
 
     this.indexes = new ModelIndexes(contract);
 
@@ -394,9 +433,8 @@ export class Model<
       this.registry = new ModelRegistry<FullInstance<Contract, Generics, Ext>>(
         modelName,
         (id) => this.cache.getCompoundKey(id),
+        (id) => this.cache.get(id)?.model,
         (id) => this.getInstanceOrReconstruct(id),
-        () => this._$dataMap,
-        (id, dataMap) => this.getInstanceOrReconstructScoped(id, dataMap),
       );
 
       this.effects = new ModelEffects<Contract, Generics, FullInstance<Contract, Generics, Ext>>(
@@ -584,10 +622,11 @@ export class Model<
     id: ModelInstanceId,
     scope?: Scope,
   ): FullInstance<Contract, Generics, Ext> | undefined {
-    if (!scope) return this.cache.get(id)?.model;
+    const serializedId = String(id) as ModelInstanceId;
+    if (!scope) return this.cache.get(serializedId)?.model;
     const dataMap = scope.getState(this._$dataMap);
-    if (!(String(id) in dataMap)) return undefined;
-    return this.getInstanceOrReconstructScoped(id, dataMap);
+    if (!(serializedId in dataMap)) return undefined;
+    return this.getInstanceOrReconstructScoped(serializedId, dataMap);
   }
 
   /**
@@ -619,20 +658,28 @@ export class Model<
 
   // ═══ Public query methods (reactive) ═══
 
-  public instance(id: ModelInstanceId): Store<FullInstance<Contract, Generics, Ext> | null>;
-  public instance(
+  /**
+   * Synchronous instance lookup. Returns the stable proxy Instance or null.
+   *
+   * Fast path is an O(1) global cache hit. If the id exists in `$dataMap`
+   * (e.g. after `fork({ values })`) but the global cache is empty, the
+   * proxy is lazily constructed and cached — its field stores remain
+   * scope-aware via `$dataMap`.
+   */
+  public get(id: ModelInstanceId): FullInstance<Contract, Generics, Ext> | null;
+  public get(
     ...parts: [string | number, string | number, ...(string | number)[]]
-  ): Store<FullInstance<Contract, Generics, Ext> | null>;
-  public instance(
-    ...args: (string | number)[]
-  ): Store<FullInstance<Contract, Generics, Ext> | null> {
-    return this.registry.instance(...(args as [string | number]));
+  ): FullInstance<Contract, Generics, Ext> | null;
+  public get(...args: (string | number)[]): FullInstance<Contract, Generics, Ext> | null {
+    return this.registry.get(...(args as [string | number]));
   }
 
-  public byPartialKey(
-    ...prefix: [string | number, ...(string | number)[]]
-  ): Store<FullInstance<Contract, Generics, Ext>[]> {
-    return this.registry.byPartialKey(...prefix);
+  /**
+   * Synchronous list of all live Instance proxies (global scope).
+   * For scoped reads, use `scope.getState(model.$ids)` + `model.get(id)`.
+   */
+  public instances(): FullInstance<Contract, Generics, Ext>[] {
+    return this.registry.instances();
   }
 
   /** Get model-level event for a contract event field (used by createUnits). */
@@ -731,14 +778,10 @@ export class Model<
     FullInstance<Contract, Generics, Ext>
   > {
     if (!this._queryRegistry) {
-      const self = this;
       const $dataMap = this.ensureDataMap();
       const context: QueryContext<FullInstance<Contract, Generics, Ext>> = {
         $ids: this.registry.$ids,
         $idSet: this.registry.$idSet,
-        get $instances() {
-          return self.registry.$instances;
-        },
         $dataMap,
         getInstance: (id) => this.cache.get(id)?.model,
         getInstanceFromData: (id, dataMap) => this.getInstanceOrReconstructScoped(id, dataMap),
@@ -1007,32 +1050,6 @@ export class Model<
     }
   }
 
-  // ═══ Relationship binding ═══
-
-  public bind<B extends BindConfig<Contract>>(
-    config: B,
-  ): Model<ApplyBind<Contract, B>, Generics, Ext, PkFields> {
-    for (const [key, thunk] of Object.entries(config)) {
-      if (!thunk) continue;
-      const entity = this.contract[key];
-      if (!entity) continue;
-
-      if (entity.kind === ContractFieldKind.Ref) {
-        if (!this.refTargets) this.refTargets = {};
-        this.refTargets[key] = thunk as () => Model<any, any>;
-      } else if (entity.kind === ContractFieldKind.Inverse) {
-        if (!this.inverseSources) this.inverseSources = {};
-        this.inverseSources[key] = thunk as () => Model<any, any>;
-      }
-    }
-    return this as Model<any, any, any, any> as Model<
-      ApplyBind<Contract, B>,
-      Generics,
-      Ext,
-      PkFields
-    >;
-  }
-
   /** Get ref metadata for a field. Returns cardinality + resolved target model, or undefined. */
   public getRefMeta(
     fieldName: string,
@@ -1067,7 +1084,7 @@ export class Model<
     if (this.contract[inverseEntity.refField]?.kind === ContractFieldKind.Ref) return;
     throw new TentaclesError(
       `Model "${this.modelName}": inverse "${fieldName}" is not bound. ` +
-        `Call ${this.modelName}.bind({ ${fieldName}: () => sourceModel }) before create().`,
+        `Pass \`refs: { ${fieldName}: () => sourceModel }\` to createModel() for "${this.modelName}".`,
     );
   }
 
@@ -1140,13 +1157,7 @@ export class Model<
         const refContractEntity = refEntity as ContractRef;
         const cardinality = refContractEntity.cardinality;
 
-        const inverseIndex = new InverseIndex(
-          sourceDataMap,
-          this.modelName,
-          refField,
-          cardinality,
-          (id, dataMap) => sourceModel.getInstanceOrReconstructScoped(id, dataMap),
-        );
+        const inverseIndex = new InverseIndex(sourceDataMap, this.modelName, refField, cardinality);
         this.inverseIndexes.set(key, inverseIndex);
       }
     });
@@ -1812,7 +1823,7 @@ export class Model<
 
       // Inverse indexes update automatically when _dataMapRemoved fires below
       // (they derive from $dataMap). We only need to drop the per-target cached
-      // $forTarget / $resolvedForTarget stores so future instances with the
+      // $forTarget stores so future instances with the
       // same id don't inherit stale derivations.
       for (const [, index] of this.inverseIndexes) {
         index.clearTarget(id);

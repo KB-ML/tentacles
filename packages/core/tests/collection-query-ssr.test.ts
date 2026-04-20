@@ -100,8 +100,8 @@ describe("COLLECTION QUERY SSR: scoped mutations", () => {
     const over30 = model.query().where("age", gt(30));
     over30.update({ score: 0 });
 
-    expect(model.instance("2").getState()?.$score.getState()).toBe(0);
-    expect(model.instance("1").getState()?.$score.getState()).toBe(100);
+    expect(model.get("2")?.$score.getState()).toBe(0);
+    expect(model.get("1")?.$score.getState()).toBe(100);
   });
 
   it("field.update updates matching global field", () => {
@@ -112,8 +112,8 @@ describe("COLLECTION QUERY SSR: scoped mutations", () => {
     const over30 = model.query().where("age", gt(30));
     over30.field("score").update(0);
 
-    expect(model.instance("2").getState()?.$score.getState()).toBe(0);
-    expect(model.instance("1").getState()?.$score.getState()).toBe(10);
+    expect(model.get("2")?.$score.getState()).toBe(0);
+    expect(model.get("1")?.$score.getState()).toBe(10);
   });
 });
 
@@ -183,7 +183,7 @@ describe("COLLECTION QUERY SSR: serialization", () => {
     const model = createUserModel();
     model.create({ id: "1", name: "Alice", age: 25, score: 10 });
 
-    const inst = model.instance("1").getState()!;
+    const inst = model.get("1")!;
     const query = model.query();
 
     const scope1 = fork();

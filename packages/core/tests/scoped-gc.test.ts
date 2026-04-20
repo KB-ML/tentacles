@@ -358,9 +358,9 @@ describe("SCOPED DELETE: refs", () => {
     const model = createModel({
       contract,
       fn: ({ $title, items, current }) => ({ $title, items, current }),
-    });
-    model.bind({ items: () => targetModel, current: () => targetModel });
-    return model;
+    refs: { items: () => targetModel, current: () => targetModel },
+  });
+       return model;
   }
 
   it("delete(id, scope) resets ref state in scope", async () => {
