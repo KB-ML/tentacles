@@ -74,7 +74,7 @@ type BindableFieldNames<
 type BindConfig<Contract extends Record<string, ContractEntity<ContractFieldKind, unknown>>> =
   BindableFieldNames<Contract> extends never
     ? Record<string, never>
-    : { [K in BindableFieldNames<Contract>]: (() => Model<any, any>) | undefined };
+    : { [K in BindableFieldNames<Contract>]: (() => Model<any, any, any, any>) | undefined };
 
 /** Replaces ContractRef target model types with actual bound model types from .bind() config */
 export type ApplyBind<
