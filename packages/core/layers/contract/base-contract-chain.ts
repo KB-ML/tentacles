@@ -126,6 +126,17 @@ export abstract class BaseContractChain<
   /** Add a store field to the chain. Called from the typed public method. */
   protected _addStore(name: string, builder: (s: unknown) => unknown): void {
     const s = createStoreFieldBuilder();
+    // Compat: @effector/swc-plugin may wrap the builder as { sid, name, and: fn }.
+    // Unwrap the inner function so the chain keeps working when the plugin
+    // decides the call site is factory-like.
+    if (
+      typeof builder !== "function" &&
+      builder !== null &&
+      typeof builder === "object" &&
+      typeof (builder as { and?: unknown }).and === "function"
+    ) {
+      builder = (builder as { and: (s: unknown) => unknown }).and;
+    }
     const result = builder(s);
     const descriptor = (
       result as {
@@ -144,6 +155,14 @@ export abstract class BaseContractChain<
   /** Add an event field to the chain. Called from the typed public method. */
   protected _addEvent(name: string, builder: (e: unknown) => unknown): void {
     const e = createEventFieldBuilder();
+    if (
+      typeof builder !== "function" &&
+      builder !== null &&
+      typeof builder === "object" &&
+      typeof (builder as { and?: unknown }).and === "function"
+    ) {
+      builder = (builder as { and: (e: unknown) => unknown }).and;
+    }
     this.fields[name] = (builder as Function)(e) as Record<string, unknown>;
   }
 

@@ -151,30 +151,41 @@ The exact variant is determined by the contract's `onConflict` setting (default 
 
 ## Deletion policies
 
-When the **target** of a ref is deleted, Tentacles applies the ref's `onDelete` policy to every source pointing at it. Policies are declared on the ref descriptor — `.ref("author", "one", { onDelete: "cascade" })`. Valid values:
+`onDelete` fires in one of two directions depending on cardinality:
 
-| Policy | Behaviour |
-|---|---|
-| `"nullify"` *(default)* | Set `$id` to `null` (one) or `remove(id)` from `$ids` (many). |
-| `"cascade"` | Delete the source instance as well. |
-| `"restrict"` | Throw `TentaclesError` — prevent the target from being deleted. |
+| Cardinality | Fires when &nbsp; | Applied to |
+|---|---|---|
+| `.ref(name, "one", { fk, onDelete })` | the **target** is deleted | the owner (the FK-holder) — SQL semantics |
+| `.ref(name, "many", { onDelete })` | the **owner** is deleted | every target id in the array |
 
-Cascade runs through the source model's `deleteFx`, so onDelete policies chain through multiple models (e.g. deleting a User cascades to Posts and then to Comments).
+Policies are declared on the ref descriptor — e.g. `.ref("author", "one", { fk: "authorId", onDelete: "cascade" })`. Valid values:
+
+| Policy | `one` (fires on target delete) | `many` (fires on owner delete) |
+|---|---|---|
+| `"nullify"` *(default)* | Null the ref field and paired FK column on every source. Source instance survives. | Owner is deleted; targets untouched; any paired back-FK on targets is nulled. |
+| `"cascade"` | Delete every source pointing at the deleted target. | Delete every target id currently in the array. |
+| `"restrict"` | Throw `TentaclesError` on the target delete if any source still references it. | Throw `TentaclesError` on the owner delete if the array is non-empty. |
+
+Cascade runs transitively — a deleted instance can itself trigger more cascades through either direction.
 
 ```ts
-// Contract: post.ref("author", "one", { onDelete: "cascade" })
+// SQL direction (one): delete a user → every post with authorId = u-1 cascade-deletes.
+// post.ref("author", "one", { fk: "authorId", onDelete: "cascade" })
 userModel.delete("u-1")
-// → every post with author = "u-1" is also deleted
-// → every comment on those posts cascades further
+
+// Owner direction (many): delete a post → every id in post.comments cascade-deletes.
+// post.ref("comments", "many", { onDelete: "cascade" })
+postModel.delete("p-1")
 ```
 
 Restricted deletes surface the error from `delete` synchronously (or as a rejected promise under a scope):
 
 ```ts
 try {
+  // one-ref restrict: throws because posts still reference u-1.
   userModel.delete("u-1")
 } catch (e) {
-  // TentaclesError: "Cannot delete userModel:u-1 — 3 Posts reference it (restrict)"
+  // TentaclesError: restrict policy …
 }
 ```
 

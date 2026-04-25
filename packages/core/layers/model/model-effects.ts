@@ -39,10 +39,10 @@ type DataMapSnapshot = Record<string, Record<string, unknown>>;
  * delete/clear paths; the update path supplies `R = Instance` so the effect
  * exposes a proper `.doneData` signal.
  */
-function attachWithSid<P, R = void>(
+function attachWithSid<P, R = void, S = DataMapSnapshot>(
   sid: string,
-  source: Store<DataMapSnapshot>,
-  handler: (state: DataMapSnapshot, params: P) => R,
+  source: Store<S>,
+  handler: (state: S, params: P) => R,
 ): Effect<P, R> {
   const config = { source, effect: handler, sid };
   // `attach` returns `Effect<P, Awaited<R>>` where `Awaited` is effector's
@@ -63,9 +63,16 @@ export class ModelEffects<
 
   private readonly sid: (suffix: string) => string;
   private readonly getDataMap: () => Store<DataMapSnapshot>;
+  private readonly getAutoIncrement?: () => Store<Record<string, number>> | undefined;
   private readonly handlers: {
-    create: (data: CreateData<Contract, Generics>) => Instance;
-    createMany: (items: CreateData<Contract, Generics>[]) => Instance[];
+    create: (
+      data: CreateData<Contract, Generics>,
+      autoIncrementSnapshot?: Record<string, number>,
+    ) => Instance;
+    createMany: (
+      items: CreateData<Contract, Generics>[],
+      autoIncrementSnapshot?: Record<string, number>,
+    ) => Instance[];
     delete: (dataMap: DataMapSnapshot, id: ModelInstanceId) => void;
     clear: (dataMap: DataMapSnapshot) => void;
     update: (
@@ -96,8 +103,14 @@ export class ModelEffects<
     sidRoot: string | undefined,
     getDataMap: () => Store<DataMapSnapshot>,
     handlers: {
-      create: (data: CreateData<Contract, Generics>) => Instance;
-      createMany: (items: CreateData<Contract, Generics>[]) => Instance[];
+      create: (
+        data: CreateData<Contract, Generics>,
+        autoIncrementSnapshot?: Record<string, number>,
+      ) => Instance;
+      createMany: (
+        items: CreateData<Contract, Generics>[],
+        autoIncrementSnapshot?: Record<string, number>,
+      ) => Instance[];
       delete: (dataMap: DataMapSnapshot, id: ModelInstanceId) => void;
       clear: (dataMap: DataMapSnapshot) => void;
       update: (
@@ -106,10 +119,12 @@ export class ModelEffects<
         data: UpdateData<Contract, Generics>,
       ) => Instance;
     },
+    getAutoIncrement?: () => Store<Record<string, number>> | undefined,
   ) {
     this.handlers = handlers;
     this.sidRoot = sidRoot;
     this.getDataMap = getDataMap;
+    this.getAutoIncrement = getAutoIncrement;
     this.sid = (suffix: string) => `tentacles:${modelName}:__${suffix}__:`;
 
     this.updated = createEvent<ModelUpdatedPayload<Contract, Generics>>({
@@ -130,10 +145,23 @@ export class ModelEffects<
     let fx = this._createFx;
     if (!fx) {
       withRegion(this.getRegion(), () => {
-        fx = createEffect<CreateData<Contract, Generics>, Instance>({
-          sid: `${this.sid("fx")}create`,
-          handler: (data) => this.handlers.create(data),
-        });
+        const autoIncrementStore = this.getAutoIncrement?.();
+        if (autoIncrementStore) {
+          // Attach-based so effector supplies the scope-current autoincrement
+          // counter snapshot. In SSR two-process mode, the client scope carries
+          // the hydrated counter while the default store starts at 0 — reading
+          // the default would collide with server-seeded ids.
+          fx = attachWithSid<CreateData<Contract, Generics>, Instance, Record<string, number>>(
+            `${this.sid("fx")}create`,
+            autoIncrementStore,
+            (snapshot, data) => this.handlers.create(data, snapshot),
+          );
+        } else {
+          fx = createEffect<CreateData<Contract, Generics>, Instance>({
+            sid: `${this.sid("fx")}create`,
+            handler: (data) => this.handlers.create(data),
+          });
+        }
       });
       this._createFx = fx;
     }
@@ -144,10 +172,19 @@ export class ModelEffects<
     let fx = this._createManyFx;
     if (!fx) {
       withRegion(this.getRegion(), () => {
-        fx = createEffect<CreateData<Contract, Generics>[], Instance[]>({
-          sid: `${this.sid("fx")}createMany`,
-          handler: (items) => this.handlers.createMany(items),
-        });
+        const autoIncrementStore = this.getAutoIncrement?.();
+        if (autoIncrementStore) {
+          fx = attachWithSid<CreateData<Contract, Generics>[], Instance[], Record<string, number>>(
+            `${this.sid("fx")}createMany`,
+            autoIncrementStore,
+            (snapshot, items) => this.handlers.createMany(items, snapshot),
+          );
+        } else {
+          fx = createEffect<CreateData<Contract, Generics>[], Instance[]>({
+            sid: `${this.sid("fx")}createMany`,
+            handler: (items) => this.handlers.createMany(items),
+          });
+        }
       });
       this._createManyFx = fx;
     }

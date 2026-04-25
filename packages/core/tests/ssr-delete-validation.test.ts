@@ -64,7 +64,7 @@ describe("Phase 8 — restrict policy against fork-hydrated data", () => {
     expect(clientScope.getState(listModel.$ids).map(String)).toContain("L1");
   });
 
-  it("restrict one-ref prevents scoped deleteFx when target has a source", async () => {
+  it("restrict one-ref prevents scoped deleteFx on the TARGET while a source still references it", async () => {
     const teamContract = createContract()
       .store("id", (s) => s<string>())
       .store("name", (s) => s<string>())
@@ -78,7 +78,7 @@ describe("Phase 8 — restrict policy against fork-hydrated data", () => {
     const playerModel = createModel({ contract: playerContract, name: "p8-restrict-player",
     refs: { team: () => teamModel },
   });
-   
+
     const serverScope = fork();
     await allSettled(teamModel.createFx, {
       scope: serverScope,
@@ -93,12 +93,16 @@ describe("Phase 8 — restrict policy against fork-hydrated data", () => {
     wipeGlobalCache(teamModel);
     wipeGlobalCache(playerModel);
 
-    const { status, value } = await allSettled(playerModel.deleteFx, {
+    // SQL direction: restrict fires when deleting the TARGET (team) while any
+    // source (player) still holds an FK to it.
+    const { status, value } = await allSettled(teamModel.deleteFx, {
       scope: clientScope,
-      params: "p1",
+      params: "t1",
     });
     expect(status).toBe("fail");
     expect(String(value)).toMatch(/restrict/);
+    expect(clientScope.getState(teamModel.$ids).map(String)).toContain("t1");
+    // Player is untouched; deleting the owner is still allowed.
     expect(clientScope.getState(playerModel.$ids).map(String)).toContain("p1");
   });
 

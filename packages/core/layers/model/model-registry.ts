@@ -1,4 +1,11 @@
-import { createEvent, createStore, type EventCallable, type Store } from "effector";
+import {
+  createEvent,
+  createStore,
+  type EventCallable,
+  type Node,
+  type Store,
+  withRegion,
+} from "effector";
 import type { CompoundKey } from "./instance-cache";
 import type { ModelInstanceId } from "./types";
 
@@ -19,9 +26,19 @@ export class ModelRegistry {
   private readonly _hasStores = new Map<string, Store<boolean>>();
 
   private readonly getCompoundKey: (id: string) => CompoundKey | undefined;
+  /** Model-level region used to anchor lazy stores (`$count`, `$pkeys`, `has(id)`).
+   *  Without this, the FIRST access of a lazy store (e.g. inside a `<View>` fn)
+   *  would attach it to the caller's region — and the View teardown would
+   *  destroy it while the cached registry/proxy still references it. */
+  private readonly region: Node;
 
-  constructor(modelName: string, getCompoundKey: (id: string) => CompoundKey | undefined) {
+  constructor(
+    modelName: string,
+    getCompoundKey: (id: string) => CompoundKey | undefined,
+    region: Node,
+  ) {
     this.getCompoundKey = getCompoundKey;
+    this.region = region;
 
     this.add = createEvent<ModelInstanceId>();
     this.addMany = createEvent<ModelInstanceId[]>();
@@ -32,13 +49,15 @@ export class ModelRegistry {
     this.$ids = createStore<ModelInstanceId[]>([], {
       sid: `tentacles:${modelName}:__registry__:ids`,
     })
-      .on(this.add, (ids, id) => {
+      .on(this.add, (ids, rawId) => {
+        const id = String(rawId) as ModelInstanceId;
         // Fast path: ID is new (most common case during create())
         if (!ids.includes(id)) return [...ids, id];
         // Slow path: replacing existing ID — must remove old position
         return [...ids.filter((x) => x !== id), id];
       })
-      .on(this.addMany, (ids, newIds) => {
+      .on(this.addMany, (ids, rawIds) => {
+        const newIds = rawIds.map((x) => String(x) as ModelInstanceId);
         // Fast path: fresh model, no existing IDs to deduplicate
         if (ids.length === 0) return newIds;
         const newSet = new Set(newIds);
@@ -47,15 +66,16 @@ export class ModelRegistry {
         if (kept.length === ids.length) return [...ids, ...newIds];
         return [...kept, ...newIds];
       })
-      .on(this.removed, (ids, id) => {
-        const idx = ids.indexOf(id);
+      .on(this.removed, (ids, rawId) => {
+        const id = String(rawId);
+        const idx = ids.indexOf(id as ModelInstanceId);
         if (idx === -1) return ids;
         const next = ids.slice();
         next.splice(idx, 1);
         return next;
       })
       .on(this.clear, () => [])
-      .on(this.reorder, (_, newOrder) => newOrder);
+      .on(this.reorder, (_, newOrder) => newOrder.map((x) => String(x) as ModelInstanceId));
 
     // O(1) Set derived from $ids — used for fast membership checks.
     this.$idSet = this.$ids.map((ids) => new Set(ids));
@@ -63,10 +83,12 @@ export class ModelRegistry {
 
   get $pkeys(): Store<CompoundKey[]> {
     if (!this._$pkeys) {
-      this._$pkeys = this.$ids.map((ids) =>
-        ids
-          .map((id) => this.getCompoundKey(String(id)))
-          .filter((pk): pk is CompoundKey => pk != null),
+      this._$pkeys = withRegion(this.region, () =>
+        this.$ids.map((ids) =>
+          ids
+            .map((id) => this.getCompoundKey(String(id)))
+            .filter((pk): pk is CompoundKey => pk != null),
+        ),
       );
     }
     return this._$pkeys;
@@ -74,7 +96,7 @@ export class ModelRegistry {
 
   get $count(): Store<number> {
     if (!this._$count) {
-      this._$count = this.$ids.map((ids) => ids.length);
+      this._$count = withRegion(this.region, () => this.$ids.map((ids) => ids.length));
     }
     return this._$count;
   }
@@ -104,9 +126,10 @@ export class ModelRegistry {
     const cached = this._hasStores.get(key);
     if (cached) return cached;
     const ids$ = this.$ids;
+    const region = this.region;
     let inner: Store<boolean> | null = null;
     const ensure = (): Store<boolean> => {
-      if (!inner) inner = ids$.map((ids) => ids.includes(key));
+      if (!inner) inner = withRegion(region, () => ids$.map((ids) => ids.includes(key)));
       return inner;
     };
     const proxy = {

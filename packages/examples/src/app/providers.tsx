@@ -22,7 +22,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <MountedContext value={mounted}>
       <Theme
-        accentColor="violet"
+        accentColor={mounted && resolved === "dark" ? "green" : "purple"}
         grayColor="sand"
         radius="medium"
         appearance={mounted ? resolved : "light"}

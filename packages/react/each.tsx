@@ -91,16 +91,21 @@ interface EachSourceProps<Instance = unknown> {
 function EachSource<Instance>({ model, source, children, fallback }: EachSourceProps<Instance>) {
   const ids = useUnit(source);
   const parentStack = useContext(ScopeStackContext);
+  const scope = useProvidedScope();
 
   if (ids.length === 0 && fallback) return <>{fallback}</>;
 
   return (
     <>
-      {ids.map((id) => (
-        <EachItem key={String(id)} id={id} model={model} parentStack={parentStack}>
-          {children}
-        </EachItem>
-      ))}
+      {ids.map((id) => {
+        const instance = model.get(id, scope ?? undefined);
+        if (!instance) return null;
+        return (
+          <EachItem key={String(id)} instance={instance} model={model} parentStack={parentStack}>
+            {children}
+          </EachItem>
+        );
+      })}
     </>
   );
 }
@@ -108,7 +113,7 @@ function EachSource<Instance>({ model, source, children, fallback }: EachSourceP
 // ═══ Per-item wrapper (memo boundary) ═══
 
 interface EachItemProps<Instance = unknown> {
-  id: ModelInstanceId;
+  instance: Instance;
   model: ModelLike<Instance>;
   parentStack: readonly ScopeEntry[];
   children?: ReactNode | ((instance: Instance) => ReactNode);
@@ -133,27 +138,13 @@ function childrenEqual(a: ChildrenProp, b: ChildrenProp): boolean {
 }
 
 const EachItem = memo(
-  function EachItem({ id, model, parentStack, children }: EachItemProps) {
+  function EachItem({ instance, model, parentStack, children }: EachItemProps) {
     const ModelContext = getModelContext(model);
-    // Parent <EachSource> subscribes to $ids and unmounts rows when an id
-    // disappears — the id is guaranteed to exist when this row renders.
-    // We intentionally do NOT subscribe to $idSet here: $idSet emits a new
-    // Set reference on every $ids upstream emission (including field-driven
-    // re-emissions from query stores), causing every row to re-render on
-    // any change anywhere.
-    const scope = useProvidedScope();
-    const instance = model.get(id, scope ?? undefined);
 
     const stack = useMemo(
-      () =>
-        instance
-          ? [...parentStack, { model, instance: instance as Record<string, unknown> }]
-          : parentStack,
+      () => [...parentStack, { model, instance: instance as Record<string, unknown> }],
       [parentStack, model, instance],
     );
-
-    // Defensive no-op for edge cases (e.g. race between unmount and parent emit).
-    if (!instance) return null;
 
     return (
       <ScopeStackContext.Provider value={stack}>
@@ -164,7 +155,7 @@ const EachItem = memo(
     );
   },
   (prev, next) =>
-    prev.id === next.id &&
+    prev.instance === next.instance &&
     prev.model === next.model &&
     prev.parentStack === next.parentStack &&
     childrenEqual(prev.children, next.children),

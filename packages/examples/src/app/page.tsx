@@ -12,6 +12,30 @@ const examples = [
     description: "Todo list with categories and todos. Demonstrates refs, inverse refs, and SSR.",
     tags: ["refs", "inverse", "SSR"],
   },
+  {
+    title: "Food order",
+    href: "/02-food-order",
+    number: "02",
+    description:
+      "Multi-screen ordering flow with restaurants, dishes, additives, and a cart. Demonstrates nested createMany and per-page view models.",
+    tags: ["nested-create", "view-model", "in-page routing"],
+  },
+  {
+    title: "Tickets order",
+    href: "/03-tickets-order",
+    number: "03",
+    description:
+      "Regenerate a passenger list from a count input and fill out dynamic, document-type-dependent forms per row.",
+    tags: ["dynamic-list", "view-model", "conditional fields"],
+  },
+  {
+    title: "Tree todo list",
+    href: "/04-tree-todo-list",
+    number: "04",
+    description:
+      "Recursive todo tree with arbitrary depth using a self-referential model via ref/inverse.",
+    tags: ["self-ref", "recursion", "inverse"],
+  },
 ];
 
 export default function Home() {

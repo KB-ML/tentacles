@@ -57,7 +57,7 @@ describe("CASCADE: many ref", () => {
 // 2. CASCADE — ONE
 // ─────────────────────────────────────────────────────────────────────────────
 
-describe("CASCADE: one ref", () => {
+describe("CASCADE: one ref (SQL direction)", () => {
   const itemModel = makeItemModel();
 
   const todoContract = createContract()
@@ -67,16 +67,29 @@ describe("CASCADE: one ref", () => {
   const todoModel = createModel({ contract: todoContract,
     refs: { current: () => itemModel },
   });
- 
-  it("delete owner cascades to single target", () => {
+
+  it("delete target cascades to owner (SQL: ON DELETE CASCADE on FK)", () => {
     itemModel.create({ id: "co1", name: "x" });
     const todo = todoModel.create({ id: "cot1" });
     todo.current.set("co1");
 
-    todoModel.delete("cot1");
+    // Delete the TARGET (item). In SQL direction, cascade on the owner's
+    // `current` FK fires here: the owning `todo` goes with it.
+    itemModel.delete("co1");
 
     expect(itemModel.$ids.getState()).not.toContain("co1");
     expect(todoModel.$ids.getState()).not.toContain("cot1");
+  });
+
+  it("deleting owner leaves target untouched (cascade is on the FK, not the ref holder)", () => {
+    itemModel.create({ id: "co2", name: "x" });
+    const todo = todoModel.create({ id: "cot3" });
+    todo.current.set("co2");
+
+    todoModel.delete("cot3");
+
+    expect(itemModel.$ids.getState()).toContain("co2");
+    expect(todoModel.$ids.getState()).not.toContain("cot3");
   });
 
   it("cascade one with null ref is no-op", () => {
@@ -122,7 +135,7 @@ describe("RESTRICT: many ref", () => {
 // 4. RESTRICT — ONE
 // ─────────────────────────────────────────────────────────────────────────────
 
-describe("RESTRICT: one ref", () => {
+describe("RESTRICT: one ref (SQL direction)", () => {
   const itemModel = makeItemModel();
 
   const todoContract = createContract()
@@ -132,20 +145,33 @@ describe("RESTRICT: one ref", () => {
   const todoModel = createModel({ contract: todoContract,
     refs: { current: () => itemModel },
   });
- 
-  it("restrict blocks deletion when ref is set", () => {
+
+  it("restrict blocks deletion of a target while it's still referenced", () => {
     itemModel.create({ id: "roi1", name: "x" });
     const todo = todoModel.create({ id: "rot1" });
     todo.current.set("roi1");
 
-    expect(() => todoModel.delete("rot1")).toThrow(/restrict policy/);
+    // Deleting the TARGET is blocked because a source (todo) still points at it.
+    expect(() => itemModel.delete("roi1")).toThrow(/restrict policy/);
+    expect(itemModel.$ids.getState()).toContain("roi1");
     expect(todoModel.$ids.getState()).toContain("rot1");
   });
 
-  it("restrict allows deletion when ref is null", () => {
-    const todo = todoModel.create({ id: "rot2" });
-    expect(() => todoModel.delete("rot2")).not.toThrow();
-    expect(todoModel.$ids.getState()).not.toContain("rot2");
+  it("deleting the owner is always allowed (it holds the FK, not the target)", () => {
+    itemModel.create({ id: "roi2", name: "x" });
+    const todo = todoModel.create({ id: "rot3" });
+    todo.current.set("roi2");
+
+    expect(() => todoModel.delete("rot3")).not.toThrow();
+    expect(todoModel.$ids.getState()).not.toContain("rot3");
+    // Target survives — now unreferenced — and can be deleted.
+    expect(() => itemModel.delete("roi2")).not.toThrow();
+  });
+
+  it("restrict allows target deletion when no source references it", () => {
+    itemModel.create({ id: "roi3", name: "x" });
+    expect(() => itemModel.delete("roi3")).not.toThrow();
+    expect(itemModel.$ids.getState()).not.toContain("roi3");
   });
 });
 
@@ -366,11 +392,50 @@ describe("SELF-REF CASCADE: tree deletion", () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// 10b. DELETE WITH NUMBER ID + INVERSE CHILDREN — regression for ghost-row bug
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("NUMBER IDs + inverse children: delete removes owner and nulls back-FK", () => {
+  it("deleting a tree node with inverse('children') clears $ids, $count, and children's parentId", () => {
+    const contract = createContract()
+      .store("id", (s) => s<number>().autoincrement())
+      .store("title", (s) => s<string>().default(""))
+      .store("parentId", (s) => s<number | null>().default(null))
+      .ref("parent", "one", { fk: "parentId" })
+      .inverse("children", "parent")
+      .pk("id");
+    const m = createModel({ contract });
+    const p = m.create({ title: "P" });
+    const pid = p.$id.getState() as number;
+    m.create({ title: "C1", parentId: pid });
+    m.create({ title: "C2", parentId: pid });
+    expect(m.$count.getState()).toBe(3);
+
+    // User code may call delete with the raw (number) id from `$id.getState()`.
+    // Pre-fix, this missed the stringified cache/registry and left a ghost.
+    m.delete(pid);
+
+    expect(m.$count.getState()).toBe(2);
+    expect(m.$ids.getState().map(String)).not.toContain(String(pid));
+
+    // Children are now orphans — their FK to the deleted parent must be null
+    // so queries like `where("parentId", eq(null))` surface them as roots.
+    const remaining = m.$ids.getState();
+    const dataMap = (m as unknown as { _$dataMap: { getState: () => Record<string, Record<string, unknown>> } })
+      ._$dataMap.getState();
+    for (const cid of remaining) {
+      expect(dataMap[String(cid)]?.parentId).toBeNull();
+      expect(dataMap[String(cid)]?.parent).toBeNull();
+    }
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // 11. MODEL.CLEAR() WITH CASCADE
 // ─────────────────────────────────────────────────────────────────────────────
 
-describe("CLEAR with cascade", () => {
-  it("clear triggers cascade for each instance", () => {
+describe("CLEAR with cascade (SQL direction)", () => {
+  it("clearing the target side cascades through source FKs", () => {
     const childContract = createContract()
       .store("id", (s) => s<string>())
       .pk("id");
@@ -383,7 +448,7 @@ describe("CLEAR with cascade", () => {
     const parentModel = createModel({ contract: parentContract,
     refs: { child: () => childModel },
   });
-   
+
     childModel.create({ id: "c1" });
     childModel.create({ id: "c2" });
     const p1 = parentModel.create({ id: "p1" });
@@ -391,10 +456,12 @@ describe("CLEAR with cascade", () => {
     const p2 = parentModel.create({ id: "p2" });
     p2.child.set("c2");
 
-    parentModel.clear();
+    // Clear the targets: every parent whose FK pointed at a cleared child
+    // cascade-deletes.
+    childModel.clear();
 
-    expect(parentModel.$ids.getState()).toEqual([]);
     expect(childModel.$ids.getState()).toEqual([]);
+    expect(parentModel.$ids.getState()).toEqual([]);
   });
 });
 
@@ -403,7 +470,7 @@ describe("CLEAR with cascade", () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe("deleteFx integration", () => {
-  it("deleteFx triggers cascade", async () => {
+  it("deleteFx triggers SQL-direction cascade (delete target → delete owners)", async () => {
     const childContract = createContract()
       .store("id", (s) => s<string>())
       .pk("id");
@@ -416,12 +483,12 @@ describe("deleteFx integration", () => {
     const parentModel = createModel({ contract: parentContract,
     refs: { child: () => childModel },
   });
-   
+
     childModel.create({ id: "c1" });
     const p = parentModel.create({ id: "p1" });
     p.child.set("c1");
 
-    await parentModel.deleteFx("p1");
+    await childModel.deleteFx("c1");
 
     expect(parentModel.$ids.getState()).toEqual([]);
     expect(childModel.$ids.getState()).toEqual([]);

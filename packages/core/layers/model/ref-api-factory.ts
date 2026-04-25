@@ -1,4 +1,4 @@
-import { createEvent, type EventCallable, type Scope, type StoreWritable } from "effector";
+import { createEvent, type EventCallable, type Scope, type StoreWritable, sample } from "effector";
 import type { SidRegistry } from "./sid-registry";
 import type { ModelInstanceId, RefManyApi, RefOneApi } from "./types";
 import { createVirtualFieldStore } from "./virtual-field-store";
@@ -69,6 +69,7 @@ export class RefApiFactory {
     sourceId?: string,
     $instanceSlice?: StoreWritable<Record<string, unknown>>,
     getSliceFieldUpdate?: () => EventCallable<{ field: string; value: unknown }> | undefined,
+    fk?: string,
   ): { api: RefManyApi | RefOneApi; registeredSids: string[] } {
     if (cardinality === "many") {
       return this.createMany(
@@ -91,6 +92,7 @@ export class RefApiFactory {
       sourceId,
       $instanceSlice,
       getSliceFieldUpdate,
+      fk,
     );
   }
 
@@ -161,6 +163,7 @@ export class RefApiFactory {
     getSliceFieldUpdate:
       | (() => EventCallable<{ field: string; value: unknown }> | undefined)
       | undefined,
+    fk?: string,
   ): { api: RefOneApi; registeredSids: string[] } {
     const registeredSids: string[] = [];
     const register = (unit: { sid?: string | null }) =>
@@ -182,6 +185,19 @@ export class RefApiFactory {
       .on(set, (_, id) => id)
       .on(clear, () => null)
       .on(clearIfMatches, (current, targetId) => (current === targetId ? null : current));
+
+    // Keep FK field in sync with the ref field. When the ref is nulled
+    // (cleared via clear() or clearIfMatches after a target deletion), the FK
+    // column must follow — otherwise queries like `where("parentId", eq(null))`
+    // see stale ids and orphans don't surface correctly.
+    if (fk && fk !== fieldName && sourceId) {
+      const fieldUpdated = this.getFieldUpdated();
+      sample({
+        clock: $id.updates,
+        fn: (value) => ({ id: sourceId, field: fk, value }),
+        target: fieldUpdated,
+      });
+    }
 
     const entry: OneEntry = { $id, set, clear, clearIfMatches, fieldName };
     this.oneRefs.add(entry);

@@ -57,14 +57,15 @@ export class InverseIndex {
    * same `.map()` node in the effector graph.
    */
   $forTarget(targetId: ModelInstanceId): Store<ModelInstanceId[]> {
-    const cached = this.storeCache.get(targetId);
+    const key = String(targetId) as ModelInstanceId;
+    const cached = this.storeCache.get(key);
     if (cached) return cached;
 
     const store = this.$byTarget.map((byTarget) => {
-      const set = byTarget.get(targetId);
+      const set = byTarget.get(key);
       return set ? [...set] : [];
     });
-    this.storeCache.set(targetId, store);
+    this.storeCache.set(key, store);
     return store;
   }
 
@@ -75,7 +76,7 @@ export class InverseIndex {
    * automatically when the corresponding source entries mutate in `$dataMap`.
    */
   clearTarget(targetId: ModelInstanceId): void {
-    this.storeCache.delete(targetId);
+    this.storeCache.delete(String(targetId) as ModelInstanceId);
   }
 }
 
@@ -101,7 +102,7 @@ function buildByTarget(
       if (!Array.isArray(value)) continue;
       for (const target of value) {
         if (target == null) continue;
-        const targetId = target as ModelInstanceId;
+        const targetId = String(target) as ModelInstanceId;
         let set = byTarget.get(targetId);
         if (!set) {
           set = new Set();
@@ -111,7 +112,7 @@ function buildByTarget(
       }
     } else {
       if (value == null) continue;
-      const targetId = value as ModelInstanceId;
+      const targetId = String(value) as ModelInstanceId;
       let set = byTarget.get(targetId);
       if (!set) {
         set = new Set();

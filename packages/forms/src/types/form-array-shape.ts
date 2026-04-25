@@ -1,5 +1,26 @@
-import type { EventCallable, Store } from "effector";
-import type { DeepErrors, DeepPartial, FormShape } from "./form-shape";
+import type { EventCallable, Scope, Store } from "effector";
+import type { DeepErrors, DeepPartial, FormFieldAccessors, FormShape } from "./form-shape";
+
+type ModelInstanceId = string | number;
+
+/**
+ * Minimal model surface of a form array. Mirrors `ModelLike` from
+ * `@kbml-tentacles/react` so `<Each model={form.array} />` and
+ * `useModel(form.array)` type-check without casts.
+ */
+export interface FormArrayModelLike<Row extends Record<string, unknown>> {
+  readonly name: string;
+  readonly $ids: Store<ModelInstanceId[]>;
+  readonly $idSet: Store<Set<ModelInstanceId>>;
+  readonly $count: Store<number>;
+  has(id: ModelInstanceId): Store<boolean>;
+  has(...parts: [string | number, string | number, ...(string | number)[]]): Store<boolean>;
+  getRefMeta(field: string): { cardinality: "one" | "many"; target: unknown } | undefined;
+  get(
+    idOrParts: ModelInstanceId | readonly (string | number)[],
+    scope?: Scope,
+  ): FormRowShape<Row> | null;
+}
 
 // ─── FormArrayShape ─────────────────────────────────────────────────────────
 
@@ -9,7 +30,8 @@ import type { DeepErrors, DeepPartial, FormShape } from "./form-shape";
  * `FormArrayShape` and a `Model` — all model APIs ($ids, get(),
  * query(), createFx, etc.) are available directly.
  */
-export interface FormArrayShape<Row extends Record<string, unknown>> {
+export interface FormArrayShape<Row extends Record<string, unknown>>
+  extends FormArrayModelLike<Row> {
   // ─── Form-array aggregates ──────────────────────────────────────────
   readonly $values: Store<Row[]>;
   readonly $errors: Store<ReadonlyArray<DeepErrors<Row> | null>>;
@@ -32,17 +54,11 @@ export interface FormArrayShape<Row extends Record<string, unknown>> {
   readonly clear: EventCallable<void>;
 
   // ─── Positional helpers ───────────────────────────────────────────────
-  $at(index: number): Store<FormRowShape<Row> | null>;
+  at(index: number): Store<FormRowShape<Row> | null>;
 
   // ─── Metadata ─────────────────────────────────────────────────────────
   readonly __path: readonly (string | number)[];
   readonly kind: "array";
-
-  // Model APIs are spread onto this at runtime ($ids, $count, get(),
-  // query(), createFx, deleteFx, etc.) but not typed here
-  // to avoid circular dependency with @kbml-tentacles/core's Model type.
-  // Runtime: Object.assign(formArrayShape, rowModel)
-  [key: string]: unknown;
 }
 
 // ─── FormRowShape ───────────────────────────────────────────────────────────
@@ -51,9 +67,10 @@ export interface FormArrayShape<Row extends Record<string, unknown>> {
  * Each row in a form array is a full `FormShape` plus row-specific metadata.
  * Rows ARE model instances whose `fn` returns this shape.
  */
-export interface FormRowShape<Row extends Record<string, unknown>> extends FormShape<Row> {
-  readonly key: string | number;
-  readonly index: Store<number>;
-  readonly arrayRef: FormArrayShape<Row>;
-  readonly remove: EventCallable<void>;
-}
+export type FormRowShape<Row extends Record<string, unknown>> = FormShape<Row> &
+  FormFieldAccessors<Row> & {
+    readonly key: string | number;
+    readonly index: Store<number>;
+    readonly arrayRef: FormArrayShape<Row>;
+    readonly remove: EventCallable<void>;
+  };

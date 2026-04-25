@@ -15,6 +15,7 @@ import { wireResetOrchestrator } from "../orchestrators/reset-orchestrator";
 import { wireSetErrorOrchestrator } from "../orchestrators/set-error-orchestrator";
 import { wireSubmitOrchestrator } from "../orchestrators/submit-orchestrator";
 import type {
+  FormFieldAccessors,
   FormShape,
   KeepStateOptions,
   SetErrorPayload,
@@ -26,12 +27,11 @@ import { createFormRuntimeContext } from "./form-runtime-context";
 
 // ─── Config types ───────────────────────────────────────────────────────────
 
-/** Inferred form shape: FormShape + per-field Field<T> accessors */
+/** Inferred form shape: FormShape + per-field accessor (Field / FormShape / FormArrayShape). */
 type InferFormShape<FC> =
   FC extends FormContractChainImpl<infer Fields, infer _CV>
-    ? FormShape<Fields & Record<string, unknown>> & {
-        [K in keyof Fields]: import("../types/field").Field<Fields[K]>;
-      }
+    ? FormShape<Fields & Record<string, unknown>> &
+        FormFieldAccessors<Fields & Record<string, unknown>>
     : FormShape<Record<string, unknown>>;
 
 export interface FormViewModelConfig<FC, R = InferFormShape<FC>> {
@@ -126,8 +126,15 @@ export function createFormViewModel<
         disable: stores.__formDisable,
       };
 
-      // 3. Build form runtime context
-      const formContext = createFormRuntimeContext(name, contract, infrastructure, sidRoot);
+      // 3. Build form runtime context (validation config + parent broadcast
+      //    events are wired below once the runner is created).
+      const formContext = createFormRuntimeContext(
+        name,
+        contract,
+        infrastructure,
+        sidRoot,
+        validate,
+      );
 
       // 4. Build the lazy form shape proxy
       const formShape = createFormShapeProxy(contract, [], formContext);
@@ -163,6 +170,24 @@ export function createFormViewModel<
         fields: fieldEntries,
         validationConfig: validate,
         crossValidators: contract.getCrossValidators().map((cv) => cv.validator),
+      });
+
+      // Expose runner's broadcast events to descendants (array rows) so
+      // `validateAll` / `showAllErrors` propagate into per-row runners.
+      formContext.parentValidation = {
+        validateAll: validationRunner.validateAll,
+        showAllErrors: validationRunner.showAllErrors,
+      };
+
+      // Wire form-level `validate()` → validateAll + showAllErrors. Without
+      // this, `shape.validate()` is a no-op.
+      sample({
+        clock: infrastructure.validate as EventCallable<void | string | string[]>,
+        target: validationRunner.validateAll,
+      });
+      sample({
+        clock: infrastructure.validate as EventCallable<void | string | string[]>,
+        target: validationRunner.showAllErrors,
       });
 
       // 7. Wire submit orchestrator
@@ -218,7 +243,15 @@ export function createFormViewModel<
         });
       }
 
-      // 11. Call user fn if provided
+      // 11. Kick off initial validation when mode shows errors eagerly, so
+      //     defaults-based errors (e.g. required) appear on mount rather
+      //     than only after the first change/blur/submit.
+      const initialMode = validate?.mode ?? "submit";
+      if (initialMode === "all" || initialMode === "change") {
+        validationRunner.validateAll();
+      }
+
+      // 12. Call user fn if provided
       if (userFn) {
         return userFn(formShape as InferFormShape<FC>, ctx);
       }

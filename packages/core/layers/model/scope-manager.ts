@@ -5,15 +5,15 @@ import { getOrInit } from "./utils";
 export class ScopeManager<
   Contract extends Record<string, ContractEntity<ContractFieldKind, unknown>>,
 > {
-  private static readonly pendingCreates = new WeakMap<
-    Scope,
-    Map<string | number, Promise<unknown>>
-  >();
+  // Instance-level (not static) so each Model has its own per-scope queue.
+  // Otherwise nested creates with same autoincrement ids across models
+  // (e.g. dish id=1 and additive id=1) collide and deadlock.
+  private readonly pendingCreates = new WeakMap<Scope, Map<string | number, Promise<unknown>>>();
 
   constructor(private readonly contract: Contract) {}
 
   enqueue<T>(scope: Scope, id: string | number, work: () => Promise<T>): Promise<T> {
-    const pendingMap = getOrInit(ScopeManager.pendingCreates, scope, () => new Map());
+    const pendingMap = getOrInit(this.pendingCreates, scope, () => new Map());
     const previous = pendingMap.get(id);
 
     const promise = (previous ? previous.catch(() => {}) : Promise.resolve()).then(() => work());

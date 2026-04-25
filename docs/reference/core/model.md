@@ -161,7 +161,7 @@ delete(id: ID): void
 delete(id: ID, scope: Scope): Promise<void>
 ```
 
-Applies cascade/nullify/restrict policies on all refs pointing to this instance. With a scope, all cascades run through `allSettled` on the supplied scope.
+Applies cascade/nullify/restrict policies — incoming `one`-refs that point at this instance (SQL direction) and outgoing `many`-refs declared on this instance (owner direction). See [Deletion policies](./ref-api#deletion-policies) for the direction split. With a scope, all cascades run through `allSettled` on the supplied scope.
 
 ### `Model.clear`
 

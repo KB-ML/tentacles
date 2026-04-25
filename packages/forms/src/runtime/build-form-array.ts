@@ -11,6 +11,7 @@ import type { FormContractChainImpl } from "../contract/form-contract-chain";
 import type { FormArrayDescriptor } from "../contract/form-contract-descriptors";
 import type { FormArrayShape } from "../types/form-array-shape";
 import type { DeepErrors } from "../types/form-shape";
+import { type FieldEntry, ValidationRunner } from "../validation/validation-runner";
 import { buildField } from "./build-field";
 import { createFormShapeProxy } from "./build-form-shape";
 import { applyDefaults, formContractToModelContract } from "./form-contract-to-model-contract";
@@ -70,6 +71,52 @@ export function buildFormArray<Row extends Record<string, unknown>>(
       // Build nested arrays (recursive)
       for (const [name, desc] of Object.entries(rowContract.getArrayDescriptors())) {
         fields[name] = buildFormArray(desc, [...rowPath, name], context);
+      }
+
+      // Wire per-row validation. Row fields are dynamic (created on append),
+      // so each row owns its own ValidationRunner. The parent form's
+      // broadcast events propagate here, and initial validation fires once
+      // so defaults-based errors (e.g. required) populate $hiddenError.
+      // Paths are row-relative so `dependsOn` references in the row
+      // contract resolve correctly (top-level fields use bare names,
+      // sub-form fields use "sub.field").
+      const rowValidationEntries: FieldEntry[] = [];
+      for (const [name, desc] of Object.entries(rowContract.getFieldDescriptors())) {
+        const f = fields[name] as { kind?: string } | undefined;
+        if (f?.kind === "field") {
+          rowValidationEntries.push({
+            path: name,
+            field: fields[name] as any,
+            descriptor: desc as any,
+          });
+        }
+      }
+      // Recurse into sub-form proxies for descendant fields
+      collectSubFields(rowContract, fields, [], rowValidationEntries);
+
+      const rowRunner = new ValidationRunner({
+        fields: rowValidationEntries,
+        validationConfig: context.validationConfig,
+        crossValidators: rowContract.getCrossValidators().map((cv) => cv.validator),
+      });
+
+      if (context.parentValidation) {
+        sample({
+          clock: context.parentValidation.validateAll,
+          target: rowRunner.validateAll,
+        });
+        sample({
+          clock: context.parentValidation.showAllErrors,
+          target: rowRunner.showAllErrors,
+        });
+      }
+
+      // Kick off initial validation for this row when mode shows errors
+      // eagerly, so defaults-based errors appear on append rather than only
+      // after the first field interaction.
+      const rowInitialMode = context.validationConfig?.mode ?? "submit";
+      if (rowInitialMode === "all" || rowInitialMode === "change") {
+        rowRunner.validateAll();
       }
 
       // Row-level aggregate stores
@@ -527,7 +574,7 @@ export function buildFormArray<Row extends Record<string, unknown>>(
   // rowModel.get(). Since Instance proxies are stable, returning
   // model.get(id) from a combine over $ids gives a store that updates
   // only when the positional id changes.
-  const $at = (index: number) =>
+  const at = (index: number) =>
     combine(rowModel.$ids, (ids) => {
       const id = ids[index];
       if (id == null) return null;
@@ -537,18 +584,18 @@ export function buildFormArray<Row extends Record<string, unknown>>(
   // 8. Assemble FormArrayShape
   const arrayShape: FormArrayShape<Row> = {
     // Spread model APIs
+    name: rowModel.name,
     $ids: rowModel.$ids,
+    $idSet: rowModel.$idSet,
     $count: rowModel.$count,
+    has: rowModel.has.bind(rowModel),
+    getRefMeta: rowModel.getRefMeta.bind(rowModel),
     get: rowModel.get.bind(rowModel),
     createFx: rowModel.createFx,
     createManyFx: rowModel.createManyFx,
     deleteFx: rowModel.deleteFx,
     clearFx: rowModel.clearFx,
     updateFx: rowModel.updateFx,
-    created: rowModel.created,
-    deleted: rowModel.deleted,
-    cleared: rowModel.cleared,
-    updated: rowModel.updated,
     reorder: reorderEvent,
     query: rowModel.query.bind(rowModel),
 
@@ -573,8 +620,8 @@ export function buildFormArray<Row extends Record<string, unknown>>(
     replace: replaceEv,
     clear: clearEv,
 
-    // Positional (reactive only — use $at for Store-based access)
-    $at,
+    // Positional (reactive — returns a Store<FormRowShape | null>)
+    at,
 
     // Metadata
     __path: path,
@@ -586,6 +633,36 @@ export function buildFormArray<Row extends Record<string, unknown>>(
   context.cache.set(cacheKey, arrayShape);
 
   return arrayShape;
+}
+
+function collectSubFields(
+  contract: FormContractChainImpl<any, any>,
+  fields: Record<string, unknown>,
+  prefix: readonly string[],
+  out: FieldEntry[],
+): void {
+  for (const [subName, subDesc] of Object.entries(contract.getSubDescriptors())) {
+    const subContract: FormContractChainImpl<any, any> = subDesc.isThunk
+      ? (subDesc.contract as () => FormContractChainImpl<any, any>)()
+      : (subDesc.contract as FormContractChainImpl<any, any>);
+    const subProxy = fields[subName] as Record<string, any> | undefined;
+    if (!subProxy) continue;
+    const subPrefix = [...prefix, subName];
+    for (const [fname, fdesc] of Object.entries(subContract.getFieldDescriptors())) {
+      const f = subProxy[fname];
+      if (f?.kind === "field") {
+        out.push({ path: [...subPrefix, fname].join("."), field: f, descriptor: fdesc as any });
+      }
+    }
+    // Recurse into nested subs
+    const nestedFields: Record<string, unknown> = {};
+    for (const key of Object.keys(subContract.getSubDescriptors())) {
+      nestedFields[key] = subProxy[key];
+    }
+    if (Object.keys(nestedFields).length > 0) {
+      collectSubFields(subContract, nestedFields, subPrefix, out);
+    }
+  }
 }
 
 function isEmptyErrors(err: unknown): boolean {

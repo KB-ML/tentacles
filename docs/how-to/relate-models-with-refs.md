@@ -187,37 +187,57 @@ The inverse lookup is powered by `InverseIndex`, an imperative `Map<targetId, Se
 
 ## Cascade options
 
-The `onDelete` option on a `.ref()` controls what happens to the ref when the **target** instance is deleted:
+The `onDelete` option triggers different directions depending on the ref's cardinality. `"one"` refs follow SQL semantics (the policy sits on the FK-holder and fires when the **target** is deleted). `"many"` refs have no SQL analog — the policy sits on the owner and fires when the **owner** is deleted.
+
+| Cardinality | Fires when &nbsp; | Applied to |
+|---|---|---|
+| `.ref(name, "one", { fk, onDelete })` | the **target** is deleted | the owner (the FK-holder) |
+| `.ref(name, "many", { onDelete })`     | the **owner** is deleted  | every target id in the array |
+
+Pick the side that actually owns the FK column. If you want "parent delete → children delete", put the policy on the child's `.ref("parent", "one", { fk, onDelete })`. If you want "container delete → members delete" and members are stored as an id list on the container, put the policy on the container's `.ref("members", "many", { onDelete })`.
+
+The default policy is `"nullify"`.
+
+### `cascade`
+
+Recursively deletes the referring side.
 
 ```ts
-.ref("author", "one", { onDelete: "cascade" })    // delete this instance too
-.ref("author", "one", { onDelete: "nullify" })    // clear the ref, keep this instance
-.ref("author", "one", { onDelete: "restrict" })   // throw if target is referenced
-```
-
-The default is `"nullify"`.
-
-- `"cascade"` — if the target is deleted, every instance that references it is also deleted. Use for dependent child entities (e.g. `Comment.post` where a comment cannot exist without its post).
-- `"nullify"` — the ref is cleared on both sides: `$id` / `$ids` is pruned. The owning instance survives. Use when the relationship is optional.
-- `"restrict"` — attempting to delete the target throws a `TentaclesError` while any instance references it. Use to prevent accidental deletions of shared resources.
-
-Cascade runs transitively. Deleting a user with `onDelete: "cascade"` on `posts` and `"cascade"` on `postModel.comments` removes the user, all their posts, and all their comments in one pass.
-
-```ts
+// SQL direction: delete a post → its comments cascade-delete.
 const commentContract = createContract()
-  .store("id",     (s) => s<string>())
-  .store("body",   (s) => s<string>())
-  .ref("post",     "one", { onDelete: "cascade" })
+  .store("id",       (s) => s<string>())
+  .store("body",     (s) => s<string>())
+  .store("postId",   (s) => s<string>())
+  .ref("post", "one", { fk: "postId", onDelete: "cascade" })
   .pk("id")
 
+// Owner direction: delete a post → every comment listed on post.comments cascade-deletes.
 const postContract = createContract()
-  .store("id",    (s) => s<string>())
-  .store("title", (s) => s<string>())
+  .store("id",       (s) => s<string>())
+  .store("title",    (s) => s<string>())
   .ref("comments", "many", { onDelete: "cascade" })
   .pk("id")
 ```
 
-Deleting a post removes all its comments.
+Either shape produces the same end state ("delete post → comments gone"). Pick whichever side holds the FK in your data model.
+
+Cascade runs transitively: a delete can fire cascade on multiple ref declarations at once, and each cascade-deleted instance can itself trigger more cascades.
+
+### `nullify` (default)
+
+Keeps the referring instance alive and clears the link.
+
+- `"one"` — on target deletion, both the ref field and the paired `fk` column on the owner become `null`. Queries like `where("parentId", eq(null))` immediately see orphans as roots.
+- `"many"` — on owner deletion, targets are untouched; the owner-side array disappears along with the owner. (The cross-model cleanup still nulls any paired back-FK columns on targets — nothing is left dangling.)
+
+### `restrict`
+
+Refuses the delete (throws `TentaclesError`) while the ref still links anything.
+
+- `"one"` — deleting the **target** throws if any source still points at it. Deleting the owner is always allowed.
+- `"many"` — deleting the **owner** throws if the array is non-empty. Deleting individual targets is unaffected.
+
+Use `restrict` to guard shared resources whose accidental removal would corrupt dependent data.
 
 ## Inline create
 
@@ -325,32 +345,20 @@ A ref whose target is the same model doesn't need an explicit `refs` entry — t
 const categoryContract = createContract()
   .store("id",       (s) => s<number>())
   .store("name",     (s) => s<string>())
-  .ref("parent",     "one",  { onDelete: "nullify" })
-  .ref("children",   "many", { onDelete: "cascade" })
+  .store("parentId", (s) => s<number | null>().default(null))
+  .ref("parent",  "one", { fk: "parentId", onDelete: "cascade" })
+  .inverse("children", "parent")
   .pk("id")
 
 const categoryModel = createModel({ contract: categoryContract })
 ```
 
-Now each category can point to its parent and list its children. No bootstrap problem: the self-reference is resolved the first time a ref API method is used.
+Now each category points to its parent via `parentId` and `category.$children` is derived automatically from the inverse. No bootstrap problem: the self-reference is resolved the first time a ref API method is used.
 
-Inverse refs also work on self-referenced models:
+For tree-shaped data, the `.ref("parent", "one", ...)` side drives subtree semantics (SQL direction — policy fires on parent deletion):
 
-```ts
-const categoryContract = createContract()
-  .store("id",   (s) => s<number>())
-  .store("name", (s) => s<string>())
-  .ref("parent", "one", { onDelete: "nullify" })
-  .inverse("children", "parent")
-  .pk("id")
-```
+- `parent: "cascade"` → deleting a node deletes its whole subtree. This is the common tree-delete behavior.
+- `parent: "nullify"` → deleting a node promotes its children to roots (`parentId` becomes `null`). Use when children should survive their parent.
+- `parent: "restrict"` → deleting a node with children throws. Use to force explicit subtree cleanup before removal.
 
-`category.$children` now returns every category whose `parent` ref points to this one — no manual bookkeeping required.
-
-For tree-shaped data, combine self-references with cascade policies to match the semantics you want:
-
-- `parent: "nullify"` / `children: "cascade"` → deleting a node removes its subtree, orphans become roots if deleted as roots.
-- `parent: "restrict"` → a node cannot be deleted while it has children.
-- `parent: "cascade"` — rarely useful; deleting a parent removes the whole subtree, but children can also be deleted independently.
-
-Pick the policy to match the invariants your data requires.
+If you instead store children as an explicit id list on the parent (`.ref("children", "many")`, no `parentId` store, no inverse), the same three policies apply in owner-direction — delete the parent, `cascade` / `nullify` / `restrict` behave against the array. Pick whichever shape matches your data.

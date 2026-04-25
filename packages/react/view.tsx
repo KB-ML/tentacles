@@ -1,5 +1,6 @@
 import type { ViewModelDefinition, ViewModelInstance } from "@kbml-tentacles/core";
 import { createEvent, createStore, type EventCallable, type StoreWritable } from "effector";
+import { useUnit } from "effector-react";
 import { type ReactNode, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { getViewContext } from "./each";
 import { cancelTeardown, scheduleTeardown } from "./view-lifecycle";
@@ -67,12 +68,14 @@ export function View<Shape>({
     return { instance, storeSetters };
   }, [definition]);
 
+  const boundSetters = useUnit(storeSetters);
+
   useLayoutEffect(() => {
     for (const [key, desc] of Object.entries(descriptors)) {
       if (desc.kind === "event") {
         callbackRefs.current[key] = props[key];
       } else {
-        storeSetters[key]?.(props[key]);
+        boundSetters[key]?.(props[key]);
       }
     }
   });

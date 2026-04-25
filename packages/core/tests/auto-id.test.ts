@@ -582,16 +582,18 @@ describe("SSR: autoincrement counter serialization", () => {
     await model.create({ value: "A" }, { scope }); // id=1
     await model.create({ value: "B" }, { scope }); // id=2
     await model.clear(scope);
-    await model.create({ value: "C" }, { scope }); // id=3 (global counter continued)
+    const fresh = await model.create({ value: "C" }, { scope });
 
+    // After a scoped clear, the scope's counter truly resets — the next create
+    // starts over at 1 because scope state is no longer coupled to any process-
+    // global counter.
+    expect(fresh.__id).toBe("1");
     const values = serialize(scope);
     const counter = values["tentacles:ssr-counter-clear:__autoIncrement__"] as Record<
       string,
       number
     >;
-    // After scoped clear the scope counter was reset to {},
-    // then the new create set it to global counter value (3)
-    expect(counter.id).toBeGreaterThanOrEqual(3);
+    expect(counter).toEqual({ id: 1 });
   });
 });
 

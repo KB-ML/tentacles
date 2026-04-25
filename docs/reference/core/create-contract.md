@@ -141,14 +141,16 @@ Declares a relationship to another model. The target is resolved at model-constr
 |---|---|
 | `name` | Field name on the instance (`$-`prefixed when used as an inverse; see below). |
 | `cardinality` | `"one"` for a single-target ref (exposes `RefOneApi`); `"many"` for a multi-target ref (exposes `RefManyApi`). |
-| `options.onDelete` | Policy when the target instance is deleted: `"cascade"` (delete this instance too), `"nullify"` (clear the ref; default), `"restrict"` (throw if deletion is attempted). |
-| `options.fk` | Optional foreign-key alias. When set, `Model.create({})` and `update()` accept `<fk>: id` as a shortcut for connecting the ref. The FK name must be the name of a store field already declared in this contract. |
+| `options.onDelete` | Cascade/restrict/nullify policy. **Direction depends on cardinality**: `"one"` refs fire on **target** deletion (SQL semantics — the policy guards the FK holder); `"many"` refs fire on **owner** deletion (no SQL analog — the policy guards the id list). Default is `"nullify"`. See [Deletion policies](../ref-api#deletion-policies). |
+| `options.fk` | Optional foreign-key alias (`"one"` only in idiomatic usage). When set, `Model.create({})` and `update()` accept `<fk>: id` as a shortcut for connecting the ref, and the FK column is kept in sync with the ref field (including nulled automatically on `nullify` / target delete). The FK name must be a store field already declared in this contract. |
 
 ```ts
 const postContract = createContract()
   .store("id",       (s) => s<string>())
   .store("authorId", (s) => s<number>())
+  // "one" + restrict: deleting an author is blocked while any post references them.
   .ref("author",   "one",  { fk: "authorId", onDelete: "restrict" })
+  // "many" + cascade: deleting this post cascade-deletes every comment in the array.
   .ref("comments", "many", { onDelete: "cascade" })
   .pk("id")
 ```

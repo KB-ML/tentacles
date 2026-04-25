@@ -1,8 +1,32 @@
 import type { Event, EventCallable, Store } from "effector";
+import type { Field } from "./field";
+import type { FormArrayShape, FormRowShape } from "./form-array-shape";
 
 // ─── Utility types ──────────────────────────────────────────────────────────
 
 export type DeepPartial<T> = T extends object ? { [K in keyof T]?: DeepPartial<T[K]> } : T;
+
+/**
+ * Map a contract field value type to its runtime accessor shape.
+ * - array of records → FormArrayShape<Row>
+ * - record of fields → FormShape<Values>
+ * - primitive / other → Field<V>
+ *
+ * Scalar leaves return `Field<V>` directly (no conditional wrapper) so
+ * consumers like `useField(fields: Field<any>[])` pick the tuple overload.
+ */
+export type FormFieldAccessor<V> = [V] extends [readonly (infer E)[]]
+  ? [E] extends [Record<string, unknown>]
+    ? FormArrayShape<E>
+    : Field<V>
+  : [V] extends [Record<string, unknown>]
+    ? FormShape<V>
+    : Field<V>;
+
+/** Apply the accessor map to every key in a Values record. */
+export type FormFieldAccessors<Values extends Record<string, unknown>> = {
+  [K in keyof Values]: FormFieldAccessor<Values[K]>;
+};
 
 export type DeepErrors<T> = T extends (infer U)[]
   ? (DeepErrors<U> | null)[]

@@ -171,6 +171,7 @@ export function createUnits(
       id,
       getInstanceSlice(),
       getSliceFieldUpdate,
+      refEntity.fk,
     );
     units[key] = api;
     registeredSids.push(...refSids);

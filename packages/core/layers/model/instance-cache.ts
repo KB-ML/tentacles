@@ -10,28 +10,29 @@ export class InstanceCache<V> {
   private readonly compoundKeys = new Map<string, CompoundKey>();
 
   get(id: ModelInstanceId): V | undefined {
-    return this.cache.get(id);
+    return this.cache.get(String(id) as ModelInstanceId);
   }
 
   getByParts(...parts: (string | number)[]): V | undefined {
     if (parts.length === 1) {
-      return this.cache.get(parts[0] as string | number);
+      return this.cache.get(String(parts[0]) as ModelInstanceId);
     }
     const compoundId = parts.map(String).join(InstanceCache.COMPOUND_PK_DELIMITER);
     return this.cache.get(compoundId);
   }
 
   set(id: ModelInstanceId, value: V): void {
-    this.cache.set(id, value);
+    this.cache.set(String(id) as ModelInstanceId, value);
   }
 
   delete(id: ModelInstanceId): void {
-    this.cache.delete(id);
-    this.compoundKeys.delete(String(id));
+    const key = String(id);
+    this.cache.delete(key as ModelInstanceId);
+    this.compoundKeys.delete(key);
   }
 
   has(id: ModelInstanceId): boolean {
-    return this.cache.has(id);
+    return this.cache.has(String(id) as ModelInstanceId);
   }
 
   *keys(): IterableIterator<ModelInstanceId> {

@@ -73,6 +73,7 @@ export interface ModelInternalSurface {
     sourceId?: string,
     $instanceSlice?: StoreWritable<Record<string, unknown>>,
     getSliceFieldUpdate?: () => EventCallable<{ field: string; value: unknown }> | undefined,
+    fk?: string,
   ): { api: RefManyApi | RefOneApi; registeredSids: string[] };
   getInverseIndex(fieldName: string): InverseIndex | undefined;
 }
@@ -151,6 +152,9 @@ export class Model<
 > {
   private static readonly sidRegistry = new SidRegistry();
   private static readonly deletionInProgress = new Set<string>();
+  /** Global registry of every live Model so a delete on one can discover
+   *  "one" refs on OTHER models that point at it (SQL-direction onDelete). */
+  private static readonly allModels = new Set<Model<any, any, any, any>>();
 
   private readonly cache: InstanceCache<InstanceEntry<Contract, Generics, Ext>>;
   private readonly pkResolver: PrimaryKeyResolver<Contract>;
@@ -188,14 +192,15 @@ export class Model<
   >();
   /** Shared .on() handler registry: accumulates event→field→reducer mappings at model level. */
   private _sharedOnRegistry?: SharedOnRegistry;
-  private autoIncrementCounters: Record<string, number> = {};
+  /** Per-process counter for unscoped creates. The store-backed counter is used
+   *  for scope-isolated creates only — we deliberately never write to the default
+   *  store state so `fork()` without explicit values sees an empty counter and
+   *  each scope starts its own sequence at 1. */
+  private defaultAutoIncrementCounter: Record<string, number> = {};
   private _$autoIncrement!: StoreWritable<Record<string, number>>;
   private _autoIncrementSet!: EventCallable<Record<string, number>>;
   private _autoIncrementReset!: EventCallable<void>;
   private _hasAutoIncrement = false;
-  /** Suppress per-item `_autoIncrementSet` dispatches while running a batched path
-   *  (e.g. `handleCreateMany`); the caller fires one consolidated event at the end. */
-  private _autoIncrementSilent = false;
   private inverseSources?: Record<string, () => Model<any, any>>;
   private refTargets?: Record<string, () => Model<any, any>>;
   private _updatedWired = false;
@@ -411,6 +416,8 @@ export class Model<
 
     this.refApiFactory = new RefApiFactory(Model.sidRegistry, () => this._dataMapFieldUpdated);
 
+    Model.allModels.add(this);
+
     this.indexes = new ModelIndexes(contract);
 
     // Pre-compute field categories — avoids O(C) kind-checking in hot paths
@@ -452,19 +459,33 @@ export class Model<
     // $ids, $dataMap, updated event, and all model-level SIDs.
     const modelRegion = this.getModelRegion();
     withRegion(modelRegion, () => {
-      this.registry = new ModelRegistry(modelName, (id) => this.cache.getCompoundKey(id));
+      this.registry = new ModelRegistry(
+        modelName,
+        (id) => this.cache.getCompoundKey(id),
+        modelRegion,
+      );
 
       this.effects = new ModelEffects<Contract, Generics, FullInstance<Contract, Generics, Ext>>(
         modelName,
         sidRoot,
         () => this._$dataMap,
         {
-          create: (data) => {
+          create: (data, autoIncrementSnapshot) => {
             this.remapFkFields(data as Record<string, unknown>);
-            const resolved = this.resolveDefaults(data as Record<string, unknown>);
-            return this.handleCreate(resolved);
+            // The attach source delivers `autoIncrementSnapshot` scope-routed:
+            // it's the scope's $autoIncrement state when createFx is dispatched
+            // via allSettled({scope}), else the default store state. Bump the
+            // snapshot locally then persist it back through _autoIncrementSet
+            // — inside this effect handler the event routes to whatever
+            // context the effect is running under.
+            const counter = this._hasAutoIncrement ? { ...(autoIncrementSnapshot ?? {}) } : {};
+            const resolved = this.resolveDefaults(data as Record<string, unknown>, counter);
+            const instance = this.handleCreate(resolved);
+            if (this._hasAutoIncrement) this._autoIncrementSet(counter);
+            return instance;
           },
-          createMany: (items) => this.handleCreateMany(items as Record<string, unknown>[]),
+          createMany: (items, autoIncrementSnapshot) =>
+            this.handleCreateMany(items as Record<string, unknown>[], autoIncrementSnapshot),
           delete: (dataMap, id) => {
             // `dataMap` is the scope-correct snapshot supplied by the attach-
             // based deleteFx. Passing it through to validateDeleteRestrictions
@@ -492,6 +513,7 @@ export class Model<
           update: (dataMap, id, data) =>
             this.handleUpdate(id, data as UpdateData<Contract, Generics>, dataMap),
         },
+        () => this._$autoIncrement,
       );
       this._dataMapSet = createEvent<{ id: string; data: Record<string, unknown> }>({
         sid: `tentacles:${modelName}:__dataMap__:set`,
@@ -632,8 +654,8 @@ export class Model<
         getModelEvent: (k) => this.getModelEventImpl(k),
         getSharedOnRegistry: () => this.getSharedOnRegistryImpl(),
         resolveRefTarget: (f, e) => this.resolveRefTargetImpl(f, e),
-        createRefApi: (c, f, s, sc, si, sm, sid, is, gsfu) =>
-          this.createRefApiImpl(c, f, s, sc, si, sm, sid, is, gsfu),
+        createRefApi: (c, f, s, sc, si, sm, sid, is, gsfu, fk) =>
+          this.createRefApiImpl(c, f, s, sc, si, sm, sid, is, gsfu, fk),
         getInverseIndex: (f) => this.getInverseIndexImpl(f),
       };
     }
@@ -769,6 +791,7 @@ export class Model<
     if (!this._queryRegistry) {
       const $dataMap = this.ensureDataMap();
       const context: QueryContext<FullInstance<Contract, Generics, Ext>> = {
+        region: this.getModelRegion(),
         $ids: this.registry.$ids,
         $idSet: this.registry.$idSet,
         $dataMap,
@@ -799,14 +822,22 @@ export class Model<
   ): FullInstance<Contract, Generics, Ext> | Promise<FullInstance<Contract, Generics, Ext>> {
     const scope = options?.scope;
     this.remapFkFields(data as Record<string, unknown>);
-    const resolved = this.resolveDefaults(data as Record<string, unknown>);
+    // Counter source:
+    //   - scoped: read scope-isolated state from $autoIncrement; post-bump value
+    //     is persisted back via allSettled(_autoIncrementSet, {scope}) below.
+    //   - unscoped: use a process-local in-memory counter; we deliberately do
+    //     NOT write to the default $autoIncrement store, so a later fork()
+    //     with no explicit values inherits an empty counter and starts at 1.
+    const counter: Record<string, number> = this._hasAutoIncrement
+      ? scope
+        ? { ...scope.getState(this._$autoIncrement) }
+        : this.defaultAutoIncrementCounter
+      : {};
+    const resolved = this.resolveDefaults(data as Record<string, unknown>, counter);
     const id = this.extractId(resolved);
     validateInstanceId(id);
 
     if (scope) {
-      const autoIncrementSnapshot = this._hasAutoIncrement
-        ? { ...this.autoIncrementCounters }
-        : null;
       return this.scopeManager.enqueue(scope, id, async () => {
         let entry = this.cache.get(id);
         if (!entry) {
@@ -816,12 +847,11 @@ export class Model<
         }
         // Flush deferred sync — fork() needs defaults synced before allSettled
         this.flushSync();
-        // Sync per-field autoincrement counters to scope for SSR serialization
-        if (autoIncrementSnapshot) {
-          await allSettled(this._autoIncrementSet, {
-            scope,
-            params: autoIncrementSnapshot,
-          });
+        // Write the post-bump counter into the scope's store ONLY (default
+        // context stays untouched, so parallel scopes don't leak into each
+        // other and serialize(scope, {onlyChanges}) includes the counter).
+        if (this._hasAutoIncrement) {
+          await allSettled(this._autoIncrementSet, { scope, params: counter });
         }
         // 1. Set $dataMap in scope FIRST — virtual stores derive from it.
         // Build filtered storeData (state + inverse + ref defaults only).
@@ -854,6 +884,8 @@ export class Model<
       }) as Promise<FullInstance<Contract, Generics, Ext>>;
     }
 
+    // Unscoped: counter was the in-memory map (mutated in place by resolveDefaults),
+    // so nothing else to persist.
     return this.handleCreate(resolved);
   }
 
@@ -870,7 +902,13 @@ export class Model<
   ): FullInstance<Contract, Generics, Ext>[] | Promise<FullInstance<Contract, Generics, Ext>[]> {
     if (options?.scope) {
       const { scope } = options;
-      return Promise.all(items.map((item) => this.create(item, { scope })));
+      return (async () => {
+        const results: FullInstance<Contract, Generics, Ext>[] = [];
+        for (const item of items) {
+          results.push(await this.create(item, { scope }));
+        }
+        return results;
+      })();
     }
     return this.handleCreateMany(items as Record<string, unknown>[]);
   }
@@ -882,33 +920,38 @@ export class Model<
    */
   private handleCreateMany(
     items: Record<string, unknown>[],
+    autoIncrementSnapshot?: Record<string, number>,
   ): FullInstance<Contract, Generics, Ext>[] {
     if (items.length === 0) return [];
 
-    // Phase 1: resolve all data and IDs upfront.
-    // Silence autoincrement event dispatches per-item — fire one batched event at the end.
+    // Counter source:
+    //   - createManyFx attach snapshot present: scope-current state, bump
+    //     locally and persist back via _autoIncrementSet below.
+    //   - direct (public createMany unscoped): mutate the in-memory counter in
+    //     place; default store stays untouched so parallel forks don't inherit.
+    const counter: Record<string, number> = this._hasAutoIncrement
+      ? autoIncrementSnapshot
+        ? { ...autoIncrementSnapshot }
+        : this.defaultAutoIncrementCounter
+      : {};
     const resolved: {
       id: string;
       data: Record<string, unknown>;
       storeData: Record<string, unknown>;
     }[] = [];
-    const prevAutoIncrementSilent = this._autoIncrementSilent;
-    this._autoIncrementSilent = this._hasAutoIncrement;
-    try {
-      for (const item of items) {
-        this.remapFkFields(item);
-        const data = this.resolveDefaults(item);
-        const id = this.extractId(data);
-        validateInstanceId(id);
-        // Clear previous instance if replacing
-        this.clearInstance(id);
-        resolved.push({ id, data, storeData: this.buildStoreData(data) });
-      }
-    } finally {
-      this._autoIncrementSilent = prevAutoIncrementSilent;
+    for (const item of items) {
+      this.remapFkFields(item);
+      const data = this.resolveDefaults(item, counter);
+      const id = this.extractId(data);
+      validateInstanceId(id);
+      // Clear previous instance if replacing
+      this.clearInstance(id);
+      resolved.push({ id, data, storeData: this.buildStoreData(data) });
     }
-    if (this._hasAutoIncrement && !prevAutoIncrementSilent) {
-      this._autoIncrementSet({ ...this.autoIncrementCounters });
+    if (this._hasAutoIncrement && autoIncrementSnapshot) {
+      // Scope path: persist the batched counter back. Unscoped direct-call
+      // already mutated the in-memory map in place.
+      this._autoIncrementSet(counter);
     }
 
     if (this._hasInverseFields) {
@@ -1087,6 +1130,7 @@ export class Model<
     sourceId?: string,
     $instanceSlice?: StoreWritable<Record<string, unknown>>,
     getSliceFieldUpdate?: () => EventCallable<{ field: string; value: unknown }> | undefined,
+    fk?: string,
   ): { api: RefManyApi | RefOneApi; registeredSids: string[] } {
     return this.refApiFactory.create(
       cardinality,
@@ -1098,6 +1142,7 @@ export class Model<
       sourceId,
       $instanceSlice,
       getSliceFieldUpdate,
+      fk,
     );
   }
 
@@ -1177,8 +1222,8 @@ export class Model<
     }
     this._bulkClearing = false;
     this.registry.clear();
-    this.autoIncrementCounters = {};
     if (this._hasAutoIncrement) {
+      this.defaultAutoIncrementCounter = {};
       this._autoIncrementReset();
     }
     // Evict cached query objects to prevent unbounded growth
@@ -1268,7 +1313,17 @@ export class Model<
   }
 
   /** Resolve a single ref element (scalar, { connect }, { create }, { connectOrCreate }) to an ID */
-  private resolveRefElement(element: unknown, targetModel: Model<any, any>): ModelInstanceId {
+  private resolveRefElement(element: unknown, targetModel: Model<any, any>): ModelInstanceId;
+  private resolveRefElement(
+    element: unknown,
+    targetModel: Model<any, any>,
+    scope: Scope,
+  ): Promise<ModelInstanceId>;
+  private resolveRefElement(
+    element: unknown,
+    targetModel: Model<any, any>,
+    scope?: Scope,
+  ): ModelInstanceId | Promise<ModelInstanceId> {
     if (typeof element === "string" || typeof element === "number") {
       // Scalar shorthand = connect. Normalize for cache lookup, return original.
       if (!targetModel.cache.get(String(element) as ModelInstanceId)) {
@@ -1276,7 +1331,8 @@ export class Model<
           `Ref connect: instance "${element}" not found in "${targetModel.modelName}"`,
         );
       }
-      return element as ModelInstanceId;
+      const id = element as ModelInstanceId;
+      return scope ? Promise.resolve(id) : id;
     }
 
     const op = element as Record<string, unknown>;
@@ -1295,10 +1351,15 @@ export class Model<
           `Ref connect: instance "${connectId}" not found in "${targetModel.modelName}"`,
         );
       }
-      return connectId;
+      return scope ? Promise.resolve(connectId) : connectId;
     }
 
     if ("create" in op) {
+      if (scope) {
+        return (targetModel as Model<any, any>)
+          .create(op.create as CreateData<any, any>, { scope })
+          .then((created) => (created as InstanceMeta).__id);
+      }
       const created = (targetModel as Model<any, any>).create(
         op.create as CreateData<any, any>,
       ) as InstanceMeta;
@@ -1307,9 +1368,14 @@ export class Model<
 
     if ("connectOrCreate" in op) {
       const createData = op.connectOrCreate as Record<string, unknown>;
-      const existingId = targetModel.getPkResolver().resolve(createData);
-      if (targetModel.cache.get(existingId as ModelInstanceId)) {
-        return existingId as ModelInstanceId;
+      const existingId = targetModel.getPkResolver().resolve(createData) as ModelInstanceId;
+      if (targetModel.cache.get(existingId)) {
+        return scope ? Promise.resolve(existingId) : existingId;
+      }
+      if (scope) {
+        return (targetModel as Model<any, any>)
+          .create(createData as CreateData<any, any>, { scope })
+          .then((created) => (created as InstanceMeta).__id);
       }
       const created = (targetModel as Model<any, any>).create(
         createData as CreateData<any, any>,
@@ -1765,12 +1831,20 @@ export class Model<
       return;
     }
 
-    // Collect cascade targets BEFORE cleanup (refs are still readable)
+    // Collect cascade targets BEFORE cleanup (refs are still readable).
+    //
+    // Direction split:
+    //   - "many" refs keep the owner-deletion direction (no SQL analog):
+    //     delete the owner → apply policy to every id in the array.
+    //   - "one" refs follow SQL semantics (policy fires when the *target* is
+    //     deleted). The owner-side check is skipped here; see the SQL-incoming
+    //     walk via `findIncomingOneRefs()` below.
     const cascadeTargets: Array<{ model: Model<any, any>; ids: ModelInstanceId[] }> = [];
     for (const key of this.contractKeys) {
       const entity = this.contract[key];
       if (!entity || entity.kind !== ContractFieldKind.Ref) continue;
       const refEntity = entity as ContractRef;
+      if (refEntity.cardinality !== "many") continue;
       if (refEntity.onDelete !== "cascade") continue;
 
       const targetIds = this.getRefTargetIds(refEntity, entry.units[key] as RefManyApi | RefOneApi);
@@ -1779,6 +1853,17 @@ export class Model<
           model: this.resolveRefTargetImpl(key, refEntity),
           ids: targetIds,
         });
+      }
+    }
+
+    // SQL-direction for "one" refs: any other model with a `one` ref pointing at us
+    // and `onDelete: "cascade"` means "when our id is deleted, delete every source
+    // that was pointing here." Collect those source ids now.
+    for (const { sourceModel, fieldName, entity } of this.findIncomingOneRefs()) {
+      if (entity.onDelete !== "cascade") continue;
+      const sourceIds = sourceModel.findSourcesReferencing(fieldName, id);
+      if (sourceIds.length > 0) {
+        cascadeTargets.push({ model: sourceModel, ids: sourceIds });
       }
     }
 
@@ -1826,6 +1911,21 @@ export class Model<
       this.cache.delete(id);
       if (!this._bulkClearing) {
         this.refApiFactory.cleanupRefsForDeletedId(id);
+        // Cross-model cleanup: any other model declaring an `.inverse()` onto
+        // this one holds refs in its own refApiFactory that must be cleared
+        // when our id disappears. Without this, `pet.owner` / `child.parent`
+        // stay pointing at the deleted target and the paired FK column
+        // (via `createOne`'s `$id.updates → fk sync`) is never nulled.
+        this.resolveInverses();
+        for (const key of this.contractKeys) {
+          const entity = this.contract[key];
+          if (!entity || entity.kind !== ContractFieldKind.Inverse) continue;
+          const sourceThunk = this.inverseSources?.[key];
+          const sourceModel = sourceThunk ? sourceThunk() : this;
+          if (sourceModel !== this) {
+            sourceModel.refApiFactory.cleanupRefsForDeletedId(id);
+          }
+        }
         this.registry.removed(id);
       }
 
@@ -1867,23 +1967,18 @@ export class Model<
     const data = map[String(id)];
     if (!data) return;
 
+    // "many" refs: policy fires on owner deletion (no SQL analog).
     for (const fieldName of this.contractKeys) {
       const entity = this.contract[fieldName];
       if (!entity || entity.kind !== ContractFieldKind.Ref) continue;
 
       const refEntity = entity as ContractRef;
+      if (refEntity.cardinality !== "many") continue;
       const policy = refEntity.onDelete ?? "nullify";
       if (policy === "nullify") continue;
 
       const refValue = data[fieldName];
-      const targetIds =
-        refEntity.cardinality === "many"
-          ? Array.isArray(refValue)
-            ? (refValue as ModelInstanceId[])
-            : []
-          : refValue != null
-            ? [refValue as ModelInstanceId]
-            : [];
+      const targetIds = Array.isArray(refValue) ? (refValue as ModelInstanceId[]) : [];
 
       if (policy === "restrict" && targetIds.length > 0) {
         throw new TentaclesError(
@@ -1894,17 +1989,82 @@ export class Model<
 
       if (policy === "cascade") {
         const targetModel = this.resolveRefTargetImpl(fieldName, refEntity);
-        // Cross-model cascade: we can't obtain the target model's scoped
-        // $dataMap without a scope handle, so cascade recursion reads the
-        // target's global snapshot. This is acceptable because cascade
-        // semantics don't *prevent* the delete — they only recurse to drive
-        // further deletes, and the reactive side-effects propagate to the
-        // active scope automatically when `clearInstance` fires.
         for (const targetId of targetIds) {
           targetModel.validateDeleteRestrictions(targetId, visited);
         }
       }
     }
+
+    // "one" refs: SQL direction — policy fires when the target is deleted,
+    // enforced against every source instance that points at the target.
+    for (const { sourceModel, fieldName, entity } of this.findIncomingOneRefs()) {
+      const policy = entity.onDelete ?? "nullify";
+      if (policy === "nullify") continue;
+
+      const sourceIds = sourceModel.findSourcesReferencing(fieldName, id);
+      if (sourceIds.length === 0) continue;
+
+      if (policy === "restrict") {
+        throw new TentaclesError(
+          `Cannot delete "${this.modelName}" instance "${String(id)}": ` +
+            `"${sourceModel.modelName}.${fieldName}" has restrict policy and is referenced by [${sourceIds.join(", ")}]`,
+        );
+      }
+
+      if (policy === "cascade") {
+        for (const sid of sourceIds) {
+          sourceModel.validateDeleteRestrictions(sid, visited);
+        }
+      }
+    }
+  }
+
+  /** Find all "one" refs on OTHER models that point at this model. Used to
+   *  drive SQL-direction onDelete policies. */
+  private findIncomingOneRefs(): Array<{
+    sourceModel: Model<any, any, any, any>;
+    fieldName: string;
+    entity: ContractRef;
+  }> {
+    const result: Array<{
+      sourceModel: Model<any, any, any, any>;
+      fieldName: string;
+      entity: ContractRef;
+    }> = [];
+    for (const other of Model.allModels) {
+      for (const key of other.contractKeys) {
+        const entity = other.contract[key];
+        if (!entity || entity.kind !== ContractFieldKind.Ref) continue;
+        const refEntity = entity as ContractRef;
+        if ((refEntity.cardinality as "many" | "one") !== "one") continue;
+        let target: Model<any, any, any, any>;
+        try {
+          target = other.resolveRefTargetImpl(key, refEntity);
+        } catch {
+          continue;
+        }
+        if (target === this) {
+          result.push({ sourceModel: other, fieldName: key, entity: refEntity });
+        }
+      }
+    }
+    return result;
+  }
+
+  /** Walk this model's `$dataMap` and return every id whose `fieldName` slot
+   *  currently holds `targetId`. Used by SQL-direction onDelete to find which
+   *  source instances must be cascade-deleted or nullified. */
+  private findSourcesReferencing(fieldName: string, targetId: ModelInstanceId): ModelInstanceId[] {
+    const out: ModelInstanceId[] = [];
+    const map = this._$dataMap.getState();
+    const match = String(targetId);
+    for (const [sid, data] of Object.entries(map)) {
+      const value = (data as Record<string, unknown>)[fieldName];
+      if (value != null && String(value) === match) {
+        out.push(sid as ModelInstanceId);
+      }
+    }
+    return out;
   }
 
   /** Read current ref target IDs from the instance's units. Uses getState() —
@@ -1935,27 +2095,32 @@ export class Model<
     const data = dataMap[String(id)];
     if (!data) return result;
 
+    // "many" refs: owner-side cascade (SSR snapshot path).
     for (const key of this.contractKeys) {
       const entity = this.contract[key];
       if (!entity || entity.kind !== ContractFieldKind.Ref) continue;
       const refEntity = entity as ContractRef;
+      if (refEntity.cardinality !== "many") continue;
       if (refEntity.onDelete !== "cascade") continue;
 
       const refValue = data[key];
-      const targetIds: ModelInstanceId[] =
-        refEntity.cardinality === "many"
-          ? Array.isArray(refValue)
-            ? (refValue as ModelInstanceId[])
-            : []
-          : refValue != null
-            ? [refValue as ModelInstanceId]
-            : [];
+      const targetIds: ModelInstanceId[] = Array.isArray(refValue)
+        ? (refValue as ModelInstanceId[])
+        : [];
 
       if (targetIds.length > 0) {
         result.push({
           model: this.resolveRefTargetImpl(key, refEntity),
           ids: targetIds,
         });
+      }
+    }
+    // "one" refs: SQL direction — collect sources that cascade on target delete.
+    for (const { sourceModel, fieldName, entity } of this.findIncomingOneRefs()) {
+      if (entity.onDelete !== "cascade") continue;
+      const sourceIds = sourceModel.findSourcesReferencing(fieldName, id);
+      if (sourceIds.length > 0) {
+        result.push({ model: sourceModel, ids: sourceIds });
       }
     }
     return result;
@@ -1977,12 +2142,13 @@ export class Model<
     const entry = this.cache.get(id);
     if (!entry) return;
 
-    // Collect cascade targets before resetting
+    // Collect cascade targets before resetting — "many" owner-direction only.
     const cascadeTargets: Array<{ model: Model<any, any>; ids: ModelInstanceId[] }> = [];
     for (const key of this.contractKeys) {
       const entity = this.contract[key];
       if (!entity || entity.kind !== ContractFieldKind.Ref) continue;
       const refEntity = entity as ContractRef;
+      if (refEntity.cardinality !== "many") continue;
       if (refEntity.onDelete !== "cascade") continue;
 
       const targetIds = this.getRefTargetIds(refEntity, entry.units[key] as RefManyApi | RefOneApi);
@@ -1991,6 +2157,14 @@ export class Model<
           model: this.resolveRefTargetImpl(key, refEntity),
           ids: targetIds,
         });
+      }
+    }
+    // SQL-direction "one" cascades.
+    for (const { sourceModel, fieldName, entity } of this.findIncomingOneRefs()) {
+      if (entity.onDelete !== "cascade") continue;
+      const sourceIds = sourceModel.findSourcesReferencing(fieldName, id);
+      if (sourceIds.length > 0) {
+        cascadeTargets.push({ model: sourceModel, ids: sourceIds });
       }
     }
 
@@ -2359,28 +2533,31 @@ export class Model<
     return this.pkResolver.resolve(data);
   }
 
-  private resolveDefaults(data: Record<string, unknown>): Record<string, unknown> {
+  /**
+   * Resolve per-field defaults. Autoincrement is *context-free* here: the caller
+   * passes a mutable `counter` snapshot (read from the active context — scope or
+   * default store). This function bumps the snapshot in place and the caller is
+   * responsible for writing the post-bump value back to that same context via
+   * `_autoIncrementSet`. Not owning counter state in the model instance is what
+   * makes autoincrement fully scope-isolated across parallel fork() scopes.
+   */
+  private resolveDefaults(
+    data: Record<string, unknown>,
+    counter: Record<string, number>,
+  ): Record<string, unknown> {
     const resolved = { ...data };
 
-    // Pass 0: autoincrement fields (per-field counters)
     if (this._hasAutoIncrement) {
-      let changed = false;
       for (const key of this.autoIncrementFields) {
         if (resolved[key] === undefined) {
-          this.autoIncrementCounters[key] = (this.autoIncrementCounters[key] ?? 0) + 1;
-          resolved[key] = this.autoIncrementCounters[key];
-          changed = true;
+          counter[key] = (counter[key] ?? 0) + 1;
+          resolved[key] = counter[key];
         } else {
-          // Explicit value: bump counter past it to avoid future collisions
           const explicit = resolved[key];
-          if (typeof explicit === "number" && explicit >= (this.autoIncrementCounters[key] ?? 0)) {
-            this.autoIncrementCounters[key] = explicit;
-            changed = true;
+          if (typeof explicit === "number" && explicit >= (counter[key] ?? 0)) {
+            counter[key] = explicit;
           }
         }
-      }
-      if (changed && !this._autoIncrementSilent) {
-        this._autoIncrementSet({ ...this.autoIncrementCounters });
       }
     }
 
@@ -2513,7 +2690,7 @@ export class Model<
     if (!this._hasInverseFields) return;
     this.resolveInverses();
 
-    const promises: Promise<unknown>[] = [];
+    const tasks: Array<() => Promise<unknown>> = [];
 
     for (const key of this.contractKeys) {
       const entity = this.contract[key];
@@ -2571,16 +2748,27 @@ export class Model<
               `Inverse "${key}": source instance "${entry}" not found in "${sourceModel.modelName}"`,
             );
           }
-          promises.push(linkInScope(entry as ModelInstanceId));
+          const entryId = entry as ModelInstanceId;
+          tasks.push(() => Promise.resolve(linkInScope(entryId)));
         } else {
-          const resolvedId = (this as Model<any, any, any>).resolveRefElement(entry, sourceModel);
-          promises.push(linkInScope(resolvedId));
+          tasks.push(async () => {
+            const resolvedId = await (this as Model<any, any, any>).resolveRefElement(
+              entry,
+              sourceModel,
+              scope,
+            );
+            await linkInScope(resolvedId);
+          });
         }
       }
     }
 
-    if (promises.length > 0) {
-      return Promise.all(promises).then(() => {});
+    if (tasks.length > 0) {
+      return (async () => {
+        for (const task of tasks) {
+          await task();
+        }
+      })();
     }
   }
 
@@ -2589,7 +2777,7 @@ export class Model<
     units: Record<string, unknown>,
     scope?: Scope,
   ): void | Promise<void> {
-    const promises: Promise<unknown>[] = [];
+    const tasks: Array<() => Promise<unknown>> = [];
 
     for (const key of this.contractKeys) {
       const entity = this.contract[key];
@@ -2604,11 +2792,15 @@ export class Model<
 
       if (refEntity.cardinality === "many") {
         const add = (refApi as RefManyApi).add;
-        const linkId = (id: ModelInstanceId) => {
-          if (!scope) {
-            add(id);
+
+        const resolveAndLink = (element: unknown) => {
+          if (scope) {
+            tasks.push(async () => {
+              const id = await this.resolveRefElement(element, targetModel, scope);
+              await allSettled(add, { scope, params: id });
+            });
           } else {
-            promises.push(allSettled(add, { scope, params: id }));
+            add(this.resolveRefElement(element, targetModel));
           }
         };
 
@@ -2619,9 +2811,9 @@ export class Model<
           // `items: [{ name: "Foo" }]` == `{ connectOrCreate: [...] }`.
           for (const item of refValue) {
             if (typeof item === "string" || typeof item === "number") {
-              linkId(this.resolveRefElement(item as ModelInstanceId, targetModel));
+              resolveAndLink(item);
             } else {
-              linkId(this.resolveRefElement({ connectOrCreate: item }, targetModel));
+              resolveAndLink({ connectOrCreate: item });
             }
           }
         } else {
@@ -2629,17 +2821,17 @@ export class Model<
           const ops = refValue as Record<string, unknown>;
           if (ops.connect) {
             for (const id of ops.connect as ModelInstanceId[]) {
-              linkId(this.resolveRefElement(id, targetModel));
+              resolveAndLink(id);
             }
           }
           if (ops.create) {
             for (const createData of ops.create as Record<string, unknown>[]) {
-              linkId(this.resolveRefElement({ create: createData }, targetModel));
+              resolveAndLink({ create: createData });
             }
           }
           if (ops.connectOrCreate) {
             for (const cocData of ops.connectOrCreate as Record<string, unknown>[]) {
-              linkId(this.resolveRefElement({ connectOrCreate: cocData }, targetModel));
+              resolveAndLink({ connectOrCreate: cocData });
             }
           }
         }
@@ -2655,17 +2847,23 @@ export class Model<
           !("disconnect" in (refValue as Record<string, unknown>))
             ? { connectOrCreate: refValue }
             : refValue;
-        const id = this.resolveRefElement(resolved, targetModel);
-        if (!scope) {
-          link(id);
+        if (scope) {
+          tasks.push(async () => {
+            const id = await this.resolveRefElement(resolved, targetModel, scope);
+            await allSettled(link, { scope, params: id });
+          });
         } else {
-          promises.push(allSettled(link, { scope, params: id }));
+          link(this.resolveRefElement(resolved, targetModel));
         }
       }
     }
 
-    if (promises.length > 0) {
-      return Promise.all(promises).then(() => {});
+    if (tasks.length > 0) {
+      return (async () => {
+        for (const task of tasks) {
+          await task();
+        }
+      })();
     }
   }
 }
