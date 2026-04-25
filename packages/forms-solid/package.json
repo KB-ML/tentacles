@@ -1,6 +1,6 @@
 {
   "name": "@kbml-tentacles/forms-solid",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Solid bindings for @kbml-tentacles/forms.",
   "keywords": [
     "effector",
@@ -49,8 +49,8 @@
     "build": "tsup"
   },
   "peerDependencies": {
-    "@kbml-tentacles/core": "^1.0.0",
-    "@kbml-tentacles/forms": "^1.0.0",
+    "@kbml-tentacles/core": "^2.0.0",
+    "@kbml-tentacles/forms": "^2.0.0",
     "effector": "^23.0.0",
     "effector-solid": "^0.23.0",
     "solid-js": ">=1.3.0"

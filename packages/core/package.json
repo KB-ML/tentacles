@@ -1,6 +1,6 @@
 {
   "name": "@kbml-tentacles/core",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Type-safe dynamic model factory for effector: contracts, models, queries, view-models with SSR scope isolation.",
   "keywords": [
     "effector",
