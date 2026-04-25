@@ -1,6 +1,6 @@
 {
   "name": "@kbml-tentacles/react",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "React bindings for @kbml-tentacles/core.",
   "keywords": [
     "effector",
@@ -48,7 +48,7 @@
     "build": "tsup"
   },
   "peerDependencies": {
-    "@kbml-tentacles/core": "^1.0.0",
+    "@kbml-tentacles/core": "^2.0.0",
     "effector": "^23.0.0",
     "effector-react": "^23.0.0",
     "react": ">=16.8.0 <20.0.0"
