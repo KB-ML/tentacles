@@ -1,6 +1,6 @@
 {
   "name": "@kbml-tentacles/forms-yup",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "Yup validation adapter for @kbml-tentacles/forms.",
   "keywords": [
     "effector",
@@ -49,8 +49,8 @@
     "build": "tsup"
   },
   "peerDependencies": {
-    "@kbml-tentacles/core": "^2.0.0",
-    "@kbml-tentacles/forms": "^2.0.0",
+    "@kbml-tentacles/core": "^2.0.1",
+    "@kbml-tentacles/forms": "^2.0.1",
     "yup": ">=1.0"
   },
   "devDependencies": {
