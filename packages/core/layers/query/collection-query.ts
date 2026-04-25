@@ -8,6 +8,7 @@ import {
   is,
   type Store,
   sample,
+  withRegion,
 } from "effector";
 import type { ContractStore } from "../contract";
 import { ContractFieldKind } from "../contract";
@@ -319,138 +320,140 @@ export class CollectionQuery<
   private get $filtered(): Store<ModelInstanceId[]> {
     if (this.presetIds) return this.presetIds;
     if (!this._$filtered) {
-      const d = this.descriptor;
-      const hasFilter = d.whereClauses.length > 0 || d.whenClauses.length > 0 || d.distinctField;
+      this._$filtered = withRegion(this.context.region, (): Store<ModelInstanceId[]> => {
+        const d = this.descriptor;
+        const hasFilter = d.whereClauses.length > 0 || d.whenClauses.length > 0 || d.distinctField;
 
-      if (!hasFilter) {
-        this._$filtered = this.context.$ids;
-      } else {
-        const reactiveStores: Store<unknown>[] = [];
-        for (const c of d.whereClauses) {
-          if (c.operator.$operand) reactiveStores.push(c.operator.$operand);
-        }
-        for (const c of d.whenClauses) {
-          reactiveStores.push(c.$condition);
-        }
-
-        const ctx = this.context;
-        const buildRV = this.buildReactiveValues;
-        const rStores = reactiveStores;
-
-        // The model exposes $index only when it has unique/indexed fields.
-        // We thread it through the combine so the query layer always reads the
-        // scope-correct snapshot at filter time. When the model has no indexes
-        // we skip it entirely (no extra graph node).
-        const $index = ctx.$index;
-        const indexSlot = $index ? 1 : 0;
-
-        // Full scan on structural changes ($ids, operands). Field mutations handled incrementally.
-        // $dataMap is always in the combine (for SSR scope correctness), but we skip full scan
-        // when only $dataMap changed (field mutation) — the incremental sample handles it.
-        const hasFU = !!ctx.$fieldUpdated && !d.distinctField;
-        let prevIds: ModelInstanceId[] | null = null;
-        let prevOperands: unknown[] | null = null;
-        let prevResult: ModelInstanceId[] = [];
-
-        const sources: Store<unknown>[] = $index
-          ? [ctx.$ids, ctx.$dataMap, $index as Store<unknown>, ...reactiveStores]
-          : [ctx.$ids, ctx.$dataMap, ...reactiveStores];
-
-        const $store = combine(sources).map((combined) => {
-          const ids = combined[0] as ModelInstanceId[];
-          const dataMap = combined[1] as Record<string, Record<string, unknown>>;
-          const indexState = ($index ? (combined[2] as IndexState) : null) as IndexState | null;
-          const operandSlice = combined.slice(2 + indexSlot);
-          const reactiveValues = buildRV(rStores, operandSlice);
-
-          if (hasFU && prevIds !== null) {
-            const idsChanged = ids !== prevIds;
-            const operandsChanged =
-              prevOperands !== null && operandSlice.some((v, i) => v !== prevOperands![i]);
-            if (!idsChanged && !operandsChanged) {
-              // Field mutation only — return same reference so effector skips update.
-              // The incremental sample handles the actual update.
-              prevIds = ids;
-              prevOperands = operandSlice;
-              return prevResult;
-            }
+        if (!hasFilter) {
+          return this.context.$ids;
+        } else {
+          const reactiveStores: Store<unknown>[] = [];
+          for (const c of d.whereClauses) {
+            if (c.operator.$operand) reactiveStores.push(c.operator.$operand);
           }
-          prevIds = ids;
-          prevOperands = operandSlice;
-          prevResult = this.fullScan(ids, dataMap, reactiveValues, indexState);
-          return prevResult;
-        }) as unknown as ReturnType<typeof createStore<ModelInstanceId[]>>;
-        ($store as unknown as { targetable: boolean }).targetable = true;
-        ($store as unknown as { graphite: { meta: { derived: number } } }).graphite.meta.derived =
-          0;
+          for (const c of d.whenClauses) {
+            reactiveStores.push(c.$condition);
+          }
 
-        // Incremental update on field mutations — O(1) per mutation instead of O(N).
-        // Skipped for DISTINCT queries (need full scan to deduplicate).
-        // Uses $store.on() instead of sample(target: $store) so that multiple field
-        // updates in the same tick each see the result of the previous one.
-        if (ctx.$fieldUpdated && !d.distinctField) {
-          const matchPred = this.matchesPredicate.bind(this);
-          const $operands = rStores.length > 0 ? combine(rStores) : createStore<unknown[]>([]);
+          const ctx = this.context;
+          const buildRV = this.buildReactiveValues;
+          const rStores = reactiveStores;
 
-          const fieldUpdatePayload = sample({
-            clock: ctx.$fieldUpdated,
-            source: {
-              dataMap: ctx.$dataMap,
-              idSet: ctx.$idSet,
-              operands: $operands,
-            },
-            fn: (
-              src: {
-                dataMap: Record<string, Record<string, unknown>>;
-                idSet: Set<ModelInstanceId>;
-                operands: unknown[];
-              },
-              clock: { id: string },
-            ) => ({ ...src, id: clock.id }),
-          });
+          // The model exposes $index only when it has unique/indexed fields.
+          // We thread it through the combine so the query layer always reads the
+          // scope-correct snapshot at filter time. When the model has no indexes
+          // we skip it entirely (no extra graph node).
+          const $index = ctx.$index;
+          const indexSlot = $index ? 1 : 0;
 
-          $store.on(
-            fieldUpdatePayload,
-            (
-              filtered: ModelInstanceId[],
-              payload: {
-                id: string;
-                dataMap: Record<string, Record<string, unknown>>;
-                idSet: Set<ModelInstanceId>;
-                operands: unknown[];
-              },
-            ) => {
-              const { id, dataMap, idSet, operands } = payload;
-              if (!idSet.has(id)) return filtered;
-              const data = dataMap[id];
-              if (!data) return filtered;
+          // Full scan on structural changes ($ids, operands). Field mutations handled incrementally.
+          // $dataMap is always in the combine (for SSR scope correctness), but we skip full scan
+          // when only $dataMap changed (field mutation) — the incremental sample handles it.
+          const hasFU = !!ctx.$fieldUpdated && !d.distinctField;
+          let prevIds: ModelInstanceId[] | null = null;
+          let prevOperands: unknown[] | null = null;
+          let prevResult: ModelInstanceId[] = [];
 
-              const reactiveValues = buildRV(rStores, operands);
-              const matches = matchPred(data, reactiveValues);
+          const sources: Store<unknown>[] = $index
+            ? [ctx.$ids, ctx.$dataMap, $index as Store<unknown>, ...reactiveStores]
+            : [ctx.$ids, ctx.$dataMap, ...reactiveStores];
 
-              const existingIdx = filtered.findIndex((fId) => String(fId) === id);
-              const wasIn = existingIdx !== -1;
+          const $store = combine(sources).map((combined) => {
+            const ids = combined[0] as ModelInstanceId[];
+            const dataMap = combined[1] as Record<string, Record<string, unknown>>;
+            const indexState = ($index ? (combined[2] as IndexState) : null) as IndexState | null;
+            const operandSlice = combined.slice(2 + indexSlot);
+            const reactiveValues = buildRV(rStores, operandSlice);
 
-              if (matches && wasIn) return filtered;
-              if (!matches && !wasIn) return filtered;
-
-              let next: ModelInstanceId[];
-              if (matches && !wasIn) {
-                next = [...filtered, id as ModelInstanceId];
-              } else {
-                next = filtered.slice();
-                next.splice(existingIdx, 1);
+            if (hasFU && prevIds !== null) {
+              const idsChanged = ids !== prevIds;
+              const operandsChanged =
+                prevOperands !== null && operandSlice.some((v, i) => v !== prevOperands![i]);
+              if (!idsChanged && !operandsChanged) {
+                // Field mutation only — return same reference so effector skips update.
+                // The incremental sample handles the actual update.
+                prevIds = ids;
+                prevOperands = operandSlice;
+                return prevResult;
               }
-              // Keep prevResult in sync so the .map() closure doesn't overwrite
-              // this result with a stale reference on the next $dataMap change.
-              prevResult = next;
-              return next;
-            },
-          );
-        }
+            }
+            prevIds = ids;
+            prevOperands = operandSlice;
+            prevResult = this.fullScan(ids, dataMap, reactiveValues, indexState);
+            return prevResult;
+          }) as unknown as ReturnType<typeof createStore<ModelInstanceId[]>>;
+          ($store as unknown as { targetable: boolean }).targetable = true;
+          ($store as unknown as { graphite: { meta: { derived: number } } }).graphite.meta.derived =
+            0;
 
-        this._$filtered = $store;
-      }
+          // Incremental update on field mutations — O(1) per mutation instead of O(N).
+          // Skipped for DISTINCT queries (need full scan to deduplicate).
+          // Uses $store.on() instead of sample(target: $store) so that multiple field
+          // updates in the same tick each see the result of the previous one.
+          if (ctx.$fieldUpdated && !d.distinctField) {
+            const matchPred = this.matchesPredicate.bind(this);
+            const $operands = rStores.length > 0 ? combine(rStores) : createStore<unknown[]>([]);
+
+            const fieldUpdatePayload = sample({
+              clock: ctx.$fieldUpdated,
+              source: {
+                dataMap: ctx.$dataMap,
+                idSet: ctx.$idSet,
+                operands: $operands,
+              },
+              fn: (
+                src: {
+                  dataMap: Record<string, Record<string, unknown>>;
+                  idSet: Set<ModelInstanceId>;
+                  operands: unknown[];
+                },
+                clock: { id: string },
+              ) => ({ ...src, id: clock.id }),
+            });
+
+            $store.on(
+              fieldUpdatePayload,
+              (
+                filtered: ModelInstanceId[],
+                payload: {
+                  id: string;
+                  dataMap: Record<string, Record<string, unknown>>;
+                  idSet: Set<ModelInstanceId>;
+                  operands: unknown[];
+                },
+              ) => {
+                const { id, dataMap, idSet, operands } = payload;
+                if (!idSet.has(id)) return filtered;
+                const data = dataMap[id];
+                if (!data) return filtered;
+
+                const reactiveValues = buildRV(rStores, operands);
+                const matches = matchPred(data, reactiveValues);
+
+                const existingIdx = filtered.findIndex((fId) => String(fId) === id);
+                const wasIn = existingIdx !== -1;
+
+                if (matches && wasIn) return filtered;
+                if (!matches && !wasIn) return filtered;
+
+                let next: ModelInstanceId[];
+                if (matches && !wasIn) {
+                  next = [...filtered, id as ModelInstanceId];
+                } else {
+                  next = filtered.slice();
+                  next.splice(existingIdx, 1);
+                }
+                // Keep prevResult in sync so the .map() closure doesn't overwrite
+                // this result with a stale reference on the next $dataMap change.
+                prevResult = next;
+                return next;
+              },
+            );
+          }
+
+          return $store;
+        }
+      });
     }
     return this._$filtered;
   }
@@ -459,110 +462,115 @@ export class CollectionQuery<
 
   private get $sorted(): Store<ModelInstanceId[]> {
     if (!this._$sorted) {
-      const d = this.descriptor;
+      this._$sorted = withRegion(this.context.region, (): Store<ModelInstanceId[]> => {
+        const d = this.descriptor;
 
-      if (d.orderByClauses.length === 0) {
-        this._$sorted = this.$filtered;
-      } else {
-        const reactiveStores: Store<unknown>[] = [];
-        for (const o of d.orderByClauses) {
-          if (is.store(o.field)) reactiveStores.push(o.field as Store<unknown>);
-          if (is.store(o.direction)) reactiveStores.push(o.direction as Store<unknown>);
-        }
-
-        const ctx = this.context;
-        const orderByClauses = d.orderByClauses;
-        const rStores = reactiveStores;
-        const buildRV = this.buildReactiveValues;
-
-        // Resolve sort field names (static, not reactive) for cheap field-change detection
-        const staticSortFields = new Set<string>();
-        for (const o of orderByClauses) {
-          if (!is.store(o.field)) staticSortFields.add(o.field as string);
-        }
-
-        const doSort = (
-          filtered: ModelInstanceId[],
-          dataMap: Record<string, Record<string, unknown>>,
-          reactiveValues: Map<Store<unknown>, unknown>,
-        ) => {
-          const sorted = [...filtered];
-          const resolvedClauses = orderByClauses.map((clause) => ({
-            field: is.store(clause.field)
-              ? (reactiveValues.get(clause.field as Store<unknown>) as string)
-              : (clause.field as string),
-            asc:
-              (is.store(clause.direction)
-                ? (reactiveValues.get(clause.direction as Store<unknown>) as string)
-                : (clause.direction as string)) === "asc",
-          }));
-          sorted.sort((a, b) => {
-            const dataA = dataMap[String(a)];
-            const dataB = dataMap[String(b)];
-            if (!dataA || !dataB) return 0;
-            for (const { field, asc } of resolvedClauses) {
-              const valA = dataA[field] as string | number;
-              const valB = dataB[field] as string | number;
-              if (valA < valB) return asc ? -1 : 1;
-              if (valA > valB) return asc ? 1 : -1;
-            }
-            return 0;
-          });
-          return sorted;
-        };
-
-        // Sort-field mutation counter: bumps ONLY when a sort field is mutated.
-        // Unlike `$lastField`, this emits a distinct value every time (via ++),
-        // so repeated mutations to the same sort field all trigger re-sort.
-        const $sortFieldBump = ctx.$fieldUpdated
-          ? createStore(0).on(ctx.$fieldUpdated, (n, { field }) =>
-              staticSortFields.has(field) ? n + 1 : n,
-            )
-          : null;
-
-        // Derive $sorted from $filtered + $dataMap, but only re-sort when
-        // $filtered changes (add/remove), sort operands change, or a sort-field
-        // was mutated ($sortFieldBump incremented). $dataMap is in the combine
-        // for SSR scope correctness but we memoize to skip re-sort (and avoid
-        // emitting a new array ref) when only non-sort fields changed.
-        const sortTriggers: Store<unknown>[] = [this.$filtered, ...reactiveStores];
-        if ($sortFieldBump) sortTriggers.push($sortFieldBump as Store<unknown>);
-
-        let prevFiltered: ModelInstanceId[] | null = null;
-        let prevOperands: unknown[] | null = null;
-        let prevBump: number | undefined;
-        let prevSorted: ModelInstanceId[] = [];
-
-        this._$sorted = combine([...sortTriggers, ctx.$dataMap]).map((combined) => {
-          const filtered = combined[0] as ModelInstanceId[];
-          const dataMap = combined[combined.length - 1] as Record<string, Record<string, unknown>>;
-          const operandEnd = $sortFieldBump ? combined.length - 2 : combined.length - 1;
-          const operandSlice = combined.slice(1, operandEnd);
-          const currentBump = $sortFieldBump
-            ? (combined[combined.length - 2] as number)
-            : undefined;
-
-          if (prevFiltered !== null) {
-            const filteredChanged = filtered !== prevFiltered;
-            const operandsChanged =
-              prevOperands !== null && operandSlice.some((v, i) => v !== prevOperands![i]);
-            const sortFieldMutated = currentBump !== prevBump;
-
-            if (!filteredChanged && !operandsChanged && !sortFieldMutated) {
-              prevFiltered = filtered;
-              prevOperands = operandSlice;
-              prevBump = currentBump;
-              return prevSorted;
-            }
+        if (d.orderByClauses.length === 0) {
+          return this.$filtered;
+        } else {
+          const reactiveStores: Store<unknown>[] = [];
+          for (const o of d.orderByClauses) {
+            if (is.store(o.field)) reactiveStores.push(o.field as Store<unknown>);
+            if (is.store(o.direction)) reactiveStores.push(o.direction as Store<unknown>);
           }
 
-          prevFiltered = filtered;
-          prevOperands = operandSlice;
-          prevBump = currentBump;
-          prevSorted = doSort(filtered, dataMap, buildRV(rStores, operandSlice));
-          return prevSorted;
-        });
-      }
+          const ctx = this.context;
+          const orderByClauses = d.orderByClauses;
+          const rStores = reactiveStores;
+          const buildRV = this.buildReactiveValues;
+
+          // Resolve sort field names (static, not reactive) for cheap field-change detection
+          const staticSortFields = new Set<string>();
+          for (const o of orderByClauses) {
+            if (!is.store(o.field)) staticSortFields.add(o.field as string);
+          }
+
+          const doSort = (
+            filtered: ModelInstanceId[],
+            dataMap: Record<string, Record<string, unknown>>,
+            reactiveValues: Map<Store<unknown>, unknown>,
+          ) => {
+            const sorted = [...filtered];
+            const resolvedClauses = orderByClauses.map((clause) => ({
+              field: is.store(clause.field)
+                ? (reactiveValues.get(clause.field as Store<unknown>) as string)
+                : (clause.field as string),
+              asc:
+                (is.store(clause.direction)
+                  ? (reactiveValues.get(clause.direction as Store<unknown>) as string)
+                  : (clause.direction as string)) === "asc",
+            }));
+            sorted.sort((a, b) => {
+              const dataA = dataMap[String(a)];
+              const dataB = dataMap[String(b)];
+              if (!dataA || !dataB) return 0;
+              for (const { field, asc } of resolvedClauses) {
+                const valA = dataA[field] as string | number;
+                const valB = dataB[field] as string | number;
+                if (valA < valB) return asc ? -1 : 1;
+                if (valA > valB) return asc ? 1 : -1;
+              }
+              return 0;
+            });
+            return sorted;
+          };
+
+          // Sort-field mutation counter: bumps ONLY when a sort field is mutated.
+          // Unlike `$lastField`, this emits a distinct value every time (via ++),
+          // so repeated mutations to the same sort field all trigger re-sort.
+          const $sortFieldBump = ctx.$fieldUpdated
+            ? createStore(0).on(ctx.$fieldUpdated, (n, { field }) =>
+                staticSortFields.has(field) ? n + 1 : n,
+              )
+            : null;
+
+          // Derive $sorted from $filtered + $dataMap, but only re-sort when
+          // $filtered changes (add/remove), sort operands change, or a sort-field
+          // was mutated ($sortFieldBump incremented). $dataMap is in the combine
+          // for SSR scope correctness but we memoize to skip re-sort (and avoid
+          // emitting a new array ref) when only non-sort fields changed.
+          const sortTriggers: Store<unknown>[] = [this.$filtered, ...reactiveStores];
+          if ($sortFieldBump) sortTriggers.push($sortFieldBump as Store<unknown>);
+
+          let prevFiltered: ModelInstanceId[] | null = null;
+          let prevOperands: unknown[] | null = null;
+          let prevBump: number | undefined;
+          let prevSorted: ModelInstanceId[] = [];
+
+          return combine([...sortTriggers, ctx.$dataMap]).map((combined) => {
+            const filtered = combined[0] as ModelInstanceId[];
+            const dataMap = combined[combined.length - 1] as Record<
+              string,
+              Record<string, unknown>
+            >;
+            const operandEnd = $sortFieldBump ? combined.length - 2 : combined.length - 1;
+            const operandSlice = combined.slice(1, operandEnd);
+            const currentBump = $sortFieldBump
+              ? (combined[combined.length - 2] as number)
+              : undefined;
+
+            if (prevFiltered !== null) {
+              const filteredChanged = filtered !== prevFiltered;
+              const operandsChanged =
+                prevOperands !== null && operandSlice.some((v, i) => v !== prevOperands![i]);
+              const sortFieldMutated = currentBump !== prevBump;
+
+              if (!filteredChanged && !operandsChanged && !sortFieldMutated) {
+                prevFiltered = filtered;
+                prevOperands = operandSlice;
+                prevBump = currentBump;
+                return prevSorted;
+              }
+            }
+
+            prevFiltered = filtered;
+            prevOperands = operandSlice;
+            prevBump = currentBump;
+            prevSorted = doSort(filtered, dataMap, buildRV(rStores, operandSlice));
+            return prevSorted;
+          });
+        }
+      });
     }
     return this._$sorted;
   }
@@ -575,12 +583,13 @@ export class CollectionQuery<
    */
   get $ids(): Store<ModelInstanceId[]> {
     if (!this._$ids) {
-      const d = this.descriptor;
-      const hasPagination = d.limitValue !== undefined || d.offsetValue !== undefined;
+      this._$ids = withRegion(this.context.region, (): Store<ModelInstanceId[]> => {
+        const d = this.descriptor;
+        const hasPagination = d.limitValue !== undefined || d.offsetValue !== undefined;
 
-      if (!hasPagination) {
-        this._$ids = this.$sorted;
-      } else {
+        if (!hasPagination) {
+          return this.$sorted;
+        }
         const reactiveStores: Store<unknown>[] = [];
         if (is.store(d.offsetValue)) reactiveStores.push(d.offsetValue as Store<unknown>);
         if (is.store(d.limitValue)) reactiveStores.push(d.limitValue as Store<unknown>);
@@ -588,7 +597,7 @@ export class CollectionQuery<
         const offsetValue = d.offsetValue;
         const limitValue = d.limitValue;
 
-        this._$ids = combine([this.$sorted, ...reactiveStores]).map((combined) => {
+        return combine([this.$sorted, ...reactiveStores]).map((combined) => {
           let results = combined[0] as ModelInstanceId[];
 
           const offset =
@@ -610,7 +619,7 @@ export class CollectionQuery<
 
           return results;
         });
-      }
+      });
     }
     return this._$ids;
   }
@@ -625,30 +634,34 @@ export class CollectionQuery<
    */
   get $list(): Store<QueryDataRecord<Contract, Generics, Ext>[]> {
     if (!this._$list) {
-      type Row = QueryDataRecord<Contract, Generics, Ext>;
-      let prev: Row[] = [];
-      this._$list = combine(this.$ids, this.context.$dataMap, (ids, dataMap) => {
-        const next: Row[] = new Array(ids.length);
-        let same = ids.length === prev.length;
-        for (let i = 0; i < ids.length; i++) {
-          const row = dataMap[String(ids[i])] as Row | undefined;
-          if (!row) {
-            same = false;
-            continue;
+      this._$list = withRegion(this.context.region, () => {
+        type Row = QueryDataRecord<Contract, Generics, Ext>;
+        let prev: Row[] = [];
+        return combine(this.$ids, this.context.$dataMap, (ids, dataMap) => {
+          const next: Row[] = new Array(ids.length);
+          let same = ids.length === prev.length;
+          for (let i = 0; i < ids.length; i++) {
+            const row = dataMap[String(ids[i])] as Row | undefined;
+            if (!row) {
+              same = false;
+              continue;
+            }
+            next[i] = row;
+            if (same && prev[i] !== row) same = false;
           }
-          next[i] = row;
-          if (same && prev[i] !== row) same = false;
-        }
-        if (same) return prev;
-        prev = next.filter(Boolean) as Row[];
-        return prev;
+          if (same) return prev;
+          prev = next.filter(Boolean) as Row[];
+          return prev;
+        });
       });
     }
     return this._$list;
   }
 
   get $count(): Store<number> {
-    if (!this._$count) this._$count = this.$ids.map((l) => l.length);
+    if (!this._$count) {
+      this._$count = withRegion(this.context.region, () => this.$ids.map((l) => l.length));
+    }
     return this._$count;
   }
 
@@ -658,7 +671,9 @@ export class CollectionQuery<
       if (d.offsetValue === undefined && d.limitValue === undefined) {
         this._$totalCount = this.$count;
       } else {
-        this._$totalCount = this.$filtered.map((l) => l.length);
+        this._$totalCount = withRegion(this.context.region, () =>
+          this.$filtered.map((l) => l.length),
+        );
       }
     }
     return this._$totalCount;
@@ -666,32 +681,34 @@ export class CollectionQuery<
 
   get $first(): Store<QueryDataRecord<Contract, Generics, Ext> | null> {
     if (!this._$first) {
-      type FirstData = QueryDataRecord<Contract, Generics, Ext> | null;
+      this._$first = withRegion(this.context.region, () => {
+        type FirstData = QueryDataRecord<Contract, Generics, Ext> | null;
 
-      const $firstId = this.$ids.map((l) => (l.length > 0 ? String(l[0]) : null), {
-        skipVoid: false,
-      });
-      const $first = createStore<FirstData>(null);
-      const init = createEvent();
+        const $firstId = this.$ids.map((l) => (l.length > 0 ? String(l[0]) : null), {
+          skipVoid: false,
+        });
+        const $first = createStore<FirstData>(null);
+        const init = createEvent();
 
-      sample({
-        clock: [init, $firstId],
-        source: { id: $firstId, dataMap: this.context.$dataMap },
-        fn: ({ id, dataMap }) => (id === null ? null : ((dataMap[id] ?? null) as FirstData)),
-        target: $first,
-      });
+        sample({
+          clock: [init, $firstId],
+          source: { id: $firstId, dataMap: this.context.$dataMap },
+          fn: ({ id, dataMap }) => (id === null ? null : ((dataMap[id] ?? null) as FirstData)),
+          target: $first,
+        });
 
-      sample({
-        clock: this.context.$dataMap,
-        source: $firstId,
-        filter: (id) => id !== null,
-        fn: (id, dataMap) => {
-          return (dataMap[id as string] ?? null) as FirstData;
-        },
-        target: $first,
+        sample({
+          clock: this.context.$dataMap,
+          source: $firstId,
+          filter: (id) => id !== null,
+          fn: (id, dataMap) => {
+            return (dataMap[id as string] ?? null) as FirstData;
+          },
+          target: $first,
+        });
+        init();
+        return $first;
       });
-      init();
-      this._$first = $first;
     }
     return this._$first;
   }
@@ -705,19 +722,21 @@ export class CollectionQuery<
    */
   get updated(): Event<{ id: string; field: string; value: unknown }> {
     if (!this._updated) {
-      const event = createEvent<{ id: string; field: string; value: unknown }>();
-      const fieldUpdated = this.context.$fieldUpdated;
-      if (fieldUpdated) {
-        const $idSet = this.$filtered.map((ids) => new Set(ids.map(String)));
-        sample({
-          clock: fieldUpdated,
-          source: $idSet,
-          filter: (set, payload) => set.has(payload.id),
-          fn: (_set, payload) => payload,
-          target: event,
-        });
-      }
-      this._updated = event;
+      this._updated = withRegion(this.context.region, () => {
+        const event = createEvent<{ id: string; field: string; value: unknown }>();
+        const fieldUpdated = this.context.$fieldUpdated;
+        if (fieldUpdated) {
+          const $idSet = this.$filtered.map((ids) => new Set(ids.map(String)));
+          sample({
+            clock: fieldUpdated,
+            source: $idSet,
+            filter: (set, payload) => set.has(payload.id),
+            fn: (_set, payload) => payload,
+            target: event,
+          });
+        }
+        return event;
+      });
     }
     return this._updated;
   }
@@ -762,18 +781,21 @@ export class CollectionQuery<
 
   get update(): EventCallable<UpdateData<Contract, Generics>> {
     if (!this._update) {
-      this._update = createEvent<Record<string, unknown>>();
-      const ctx = this.context;
-      const fx = createEffect(
-        ({ ids, data }: { ids: ModelInstanceId[]; data: Record<string, unknown> }) => {
-          for (const id of ids) ctx.handleUpdate(id, data);
-        },
-      );
-      sample({
-        clock: this._update,
-        source: this.$ids,
-        fn: (ids: ModelInstanceId[], data: Record<string, unknown>) => ({ ids, data }),
-        target: fx,
+      this._update = withRegion(this.context.region, () => {
+        const ev = createEvent<Record<string, unknown>>();
+        const ctx = this.context;
+        const fx = createEffect(
+          ({ ids, data }: { ids: ModelInstanceId[]; data: Record<string, unknown> }) => {
+            for (const id of ids) ctx.handleUpdate(id, data);
+          },
+        );
+        sample({
+          clock: ev,
+          source: this.$ids,
+          fn: (ids: ModelInstanceId[], data: Record<string, unknown>) => ({ ids, data }),
+          target: fx,
+        });
+        return ev;
       });
     }
     return this._update as EventCallable<any>;
@@ -781,16 +803,19 @@ export class CollectionQuery<
 
   get delete(): EventCallable<void> {
     if (!this._delete) {
-      this._delete = createEvent<void>();
-      const ctx = this.context;
-      const fx = createEffect((ids: ModelInstanceId[]) => {
-        for (const id of ids) ctx.handleDelete(id);
-      });
-      sample({
-        clock: this._delete,
-        source: this.$ids,
-        fn: (ids: ModelInstanceId[]) => [...ids],
-        target: fx,
+      this._delete = withRegion(this.context.region, () => {
+        const ev = createEvent<void>();
+        const ctx = this.context;
+        const fx = createEffect((ids: ModelInstanceId[]) => {
+          for (const id of ids) ctx.handleDelete(id);
+        });
+        sample({
+          clock: ev,
+          source: this.$ids,
+          fn: (ids: ModelInstanceId[]) => [...ids],
+          target: fx,
+        });
+        return ev;
       });
     }
     return this._delete;

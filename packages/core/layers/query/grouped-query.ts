@@ -1,4 +1,4 @@
-import { combine, type Store } from "effector";
+import { combine, type Store, withRegion } from "effector";
 import type { ModelInstanceId } from "../model/types";
 import type { CollectionQuery } from "./collection-query";
 import type { HavingClause } from "./query-descriptor";
@@ -58,17 +58,17 @@ export class GroupedQuery<
   /** Internal id-grouping used by sub-queries created via `group(key)`. */
   private get $groupIds(): Store<Map<K, ModelInstanceId[]>> {
     if (!this._$groupIds) {
-      const groupField = this.descriptor.groupByField ?? "";
-      const havingClauses = this.descriptor.havingClauses;
-      const ctx = this.context;
+      this._$groupIds = withRegion(this.context.region, () => {
+        const groupField = this.descriptor.groupByField ?? "";
+        const havingClauses = this.descriptor.havingClauses;
+        const ctx = this.context;
 
-      const reactiveStores: Store<unknown>[] = [];
-      for (const h of havingClauses) {
-        if (h.operator.$operand) reactiveStores.push(h.operator.$operand);
-      }
+        const reactiveStores: Store<unknown>[] = [];
+        for (const h of havingClauses) {
+          if (h.operator.$operand) reactiveStores.push(h.operator.$operand);
+        }
 
-      this._$groupIds = combine([this.parentIds(), ctx.$dataMap, ...reactiveStores]).map(
-        (combined) => {
+        return combine([this.parentIds(), ctx.$dataMap, ...reactiveStores]).map((combined) => {
           const ids = combined[0] as ModelInstanceId[];
           const dataMap = combined[1] as Record<string, Record<string, unknown>>;
 
@@ -103,8 +103,8 @@ export class GroupedQuery<
           }
 
           return groups;
-        },
-      );
+        });
+      });
     }
     return this._$groupIds;
   }
@@ -116,30 +116,36 @@ export class GroupedQuery<
    */
   get $groups(): Store<Map<K, QueryDataRecord<Contract, Generics, Ext>[]>> {
     if (!this._$groups) {
-      type Row = QueryDataRecord<Contract, Generics, Ext>;
-      this._$groups = combine(this.$groupIds, this.context.$dataMap, (groupIds, dataMap) => {
-        const out = new Map<K, Row[]>();
-        for (const [key, ids] of groupIds) {
-          const rows: Row[] = [];
-          for (const id of ids) {
-            const data = dataMap[String(id)] as Row | undefined;
-            if (data) rows.push(data);
+      this._$groups = withRegion(this.context.region, () => {
+        type Row = QueryDataRecord<Contract, Generics, Ext>;
+        return combine(this.$groupIds, this.context.$dataMap, (groupIds, dataMap) => {
+          const out = new Map<K, Row[]>();
+          for (const [key, ids] of groupIds) {
+            const rows: Row[] = [];
+            for (const id of ids) {
+              const data = dataMap[String(id)] as Row | undefined;
+              if (data) rows.push(data);
+            }
+            out.set(key, rows);
           }
-          out.set(key, rows);
-        }
-        return out;
+          return out;
+        });
       });
     }
     return this._$groups;
   }
 
   get $keys(): Store<K[]> {
-    if (!this._$keys) this._$keys = this.$groupIds.map((g) => [...g.keys()]);
+    if (!this._$keys) {
+      this._$keys = withRegion(this.context.region, () => this.$groupIds.map((g) => [...g.keys()]));
+    }
     return this._$keys;
   }
 
   get $count(): Store<number> {
-    if (!this._$count) this._$count = this.$groupIds.map((g) => g.size);
+    if (!this._$count) {
+      this._$count = withRegion(this.context.region, () => this.$groupIds.map((g) => g.size));
+    }
     return this._$count;
   }
 
@@ -147,8 +153,10 @@ export class GroupedQuery<
     let existing = this._groupQueries.get(key);
     if (existing) return existing;
 
-    const $groupMemberIds = this.$groupIds.map((groups) => groups.get(key) ?? []);
-    existing = this.queryRegistry.createFromStore($groupMemberIds);
+    existing = withRegion(this.context.region, () => {
+      const $groupMemberIds = this.$groupIds.map((groups) => groups.get(key) ?? []);
+      return this.queryRegistry.createFromStore($groupMemberIds);
+    });
     this._groupQueries.set(key, existing);
     return existing;
   }

@@ -1,9 +1,17 @@
-import type { EventCallable, Store } from "effector";
+import type { EventCallable, Node, Store } from "effector";
 import type { ContractEntity, ContractFieldKind } from "../../contract";
 import type { IndexState } from "../../model/model-indexes";
 import type { ModelInstanceId } from "../../model/types";
 
 export interface QueryContext<Instance> {
+  /**
+   * Model-level region used when creating query-derived stores/events.
+   * Anchoring lazy units here keeps them alive for the lifetime of the model
+   * instead of inheriting whatever region was active on first access — which
+   * would let a `<View>` teardown destroy stores still referenced by the
+   * cached `CollectionQuery`.
+   */
+  readonly region: Node;
   readonly $ids: Store<ModelInstanceId[]>;
   readonly $idSet: Store<Set<ModelInstanceId>>;
   readonly $dataMap: Store<Record<string, Record<string, unknown>>>;
