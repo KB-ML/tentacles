@@ -1,31 +1,45 @@
-# Tentacles
+# @kbml-tentacles/forms-yup
 
-Динамические модели для effector
+[Yup](https://github.com/jquense/yup) validation adapter for [@kbml-tentacles/forms](../forms). Plug a Yup schema into a field validator — error paths, types, and messages flow through unchanged.
 
-## Создание
-
-Новый контракт:
-```ts
-const myContract = createContract((builder) => ({
-    a: builder.state().value<number>(),
-    b: builder.state().generic<"T">(),
-    c: builder.event().value<number>()
-}))
+```sh
+npm install yup @kbml-tentacles/core @kbml-tentacles/forms @kbml-tentacles/forms-yup
 ```
 
-Новая модель:
-```ts
-const model = myContract.createModel<{ T: boolean }>((contract) => {
-    sample({ clock: contract.a, fn: () => true, target: contract.b })
-
-    return contract
-})
-```
+## Quick start
 
 ```ts
-const todoModalViewModel = createViewModel(contract, (model, { props, ctx, children, mounted, unmounted }) => {
-  
+import * as y from "yup";
+import { createFormContract } from "@kbml-tentacles/forms";
+import { yup, yupAsync } from "@kbml-tentacles/forms-yup";
 
-  return { ...model }
-})
+const contract = createFormContract()
+  .field("email", (f) =>
+    f<string>().default("").validate(yup(y.string().email("Invalid").required("Required"))),
+  )
+  .field("username", (f) =>
+    f<string>().default("").validateAsync(
+      yupAsync(y.string().test("avail", "Taken", async (v) => await isAvailable(v ?? ""))),
+    ),
+  );
 ```
+
+## API
+
+- **`yup(schema, opts?)`** — sync validator using `schema.validateSync({ abortEarly: false })`. Each Yup issue maps to `{ path, message, code }`.
+- **`yupAsync(schema)`** — async validator using `schema.validate({ abortEarly: false })`. Pair with `.validateAsync(...)` for debounce + cancellation.
+
+## Documentation
+
+- How-to: [use a schema validator](../../docs/how-to/use-schema-validator.md)
+- Reference: [`docs/reference/validators`](../../docs/reference/validators)
+
+## Peer dependencies
+
+- `yup >=1.0`
+- `@kbml-tentacles/core ^1.0.0`
+- `@kbml-tentacles/forms ^1.0.0`
+
+## License
+
+[MIT](../../LICENSE) © Nikita Lumpov
