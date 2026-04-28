@@ -2,6 +2,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { gzipSync } from "node:zlib";
 import { defineConfig } from "vitepress";
+import llmstxtPlugin from "vitepress-plugin-llmstxt";
 import { tabsMarkdownPlugin } from "vitepress-plugin-tabs";
 
 function generateBadge(label: string, value: string, color: string, outPath: string) {
@@ -198,7 +199,7 @@ export default defineConfig({
   head: [["link", { rel: "icon", type: "image/svg+xml", href: "/logo-light.svg" }]],
 
   vite: {
-    plugins: [showcaseHighlightPlugin(), badgesPlugin()],
+    plugins: [showcaseHighlightPlugin(), badgesPlugin(), llmstxtPlugin()],
   },
 
   markdown: {
