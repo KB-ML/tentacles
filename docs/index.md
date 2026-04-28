@@ -11,13 +11,13 @@ hero:
   actions:
     - theme: brand
       text: Get Started
-      link: /tutorials/your-first-model
+      link: /01-tutorials/01-your-first-model
     - theme: alt
       text: How-to guides
-      link: /how-to/
+      link: /02-how-to/
     - theme: alt
       text: API Reference
-      link: /reference/
+      link: /03-reference/
 
 features:
   - title: Contract-First Design
@@ -38,11 +38,13 @@ features:
   - title: Zero Boilerplate
     icon: "\U000026A1"
     details: "No manual createStore/createEvent. No ID management. No serialization config. Built-in $ids, $count, instances(), createFx, deleteFx, updateFx."
+description: "Documentation page."
 ---
 
 <div class="badge-row">
-  <img src="/badge-size.svg" alt="bundle size" />
-  <img src="/badge-coverage.svg" alt="test coverage" />
+  <img src="https://img.shields.io/npm/v/%40kbml-tentacles%2Fcore?label=npm&color=22c55e" alt="npm version" />
+  <img src="https://img.shields.io/bundlephobia/minzip/%40kbml-tentacles%2Fcore?label=min%2Bgzip&color=22c55e" alt="min+gzip size" />
+  <img src="https://img.shields.io/npm/dm/%40kbml-tentacles%2Fcore?label=downloads&color=64748b" alt="npm downloads" />
 </div>
 
 <div class="landing-section">
@@ -51,25 +53,118 @@ features:
 
   <div class="install-row">
 
-::: code-group
-
-```sh [npm]
-npm install @kbml-tentacles/core
-```
-
-```sh [yarn]
-yarn add @kbml-tentacles/core
-```
-
-```sh [pnpm]
-pnpm add @kbml-tentacles/core
-```
-
-:::
+  ::: code-group
+  ```sh [npm]
+  npm install @kbml-tentacles/core
+  ```
+  ```sh [yarn]
+  yarn add @kbml-tentacles/core
+  ```
+  ```sh [pnpm]
+  pnpm add @kbml-tentacles/core
+  ```
+  :::
 
   </div>
 
-  <FeatureShowcase />
+  <div class="landing-section">
+    <h2 class="section-title">Feature Showcase</h2>
+    <p class="section-subtitle">Key API surfaces — in one glance</p>
+
+::::tabs
+== Contracts
+```ts
+const userContract = createContract()
+  .store("name", (s) => s<string>())
+  .store("age", (s) => s<number>().default(0))
+  .event("rename", (e) => e<string>())
+  .derived("isAdult", (s) =>
+    s.$age.map((a) => a >= 18)
+  )
+  .ref("posts", "many")
+  .pk("name")
+```
+== Models
+```ts
+const userModel = createModel({
+  contract: userContract,
+  name: "user",
+  fn: ({ $name, rename, $age }, _) => {
+    $name.on(rename, (_, next) => next)
+    return { $name, rename, $age }
+  },
+})
+
+userModel.create({ name: "Alice", age: 25 })
+userModel.create({ name: "Bob" }) // age defaults to 0
+
+userModel.$count     // Store<number> → 2
+userModel.$ids       // Store<string[]>
+userModel.get(id)    // Instance | null
+```
+== Queries
+```ts
+import { gte, eq } from "@kbml-tentacles/core"
+
+const adults = userModel.query()
+  .where("age", gte(18))
+  .where("role", eq("admin"))
+  .orderBy("name", "asc")
+  .limit($pageSize)
+
+adults.$ids        // Store<ModelInstanceId[]>
+adults.$list       // Store<Row[]> — plain data rows
+adults.$count      // Store<number>
+adults.$totalCount // Store<number> — before pagination
+
+const byRole = userModel.query().groupBy("role")
+byRole.$groups     // Store<Map<string, Row[]>>
+```
+== ViewModels
+```ts
+const todoViewContract = createViewContract()
+  .store("search", (s) => s<string>().default(""))
+  .store("page", (s) => s<number>()
+    .default(0).resetOn("search"))
+
+const todoViewProps = createPropsContract()
+  .store("pageSize", (s) => s<number>().optional())
+  .event("onDelete", (e) => e<string>())
+
+const todoView = createViewModel({
+  contract: todoViewContract,
+  props: todoViewProps,
+  fn: (stores, { mounted, props }) => {
+    sample({ clock: mounted, target: loadFx })
+    return { ...stores, onDelete: props.onDelete }
+  },
+})
+```
+== Frameworks
+```tsx
+// React
+function TodoApp(props) {
+  const { $search, $page } = useView(todoView, props)
+  return <SearchInput />
+}
+
+// Vue — emit events are auto-wired
+const { $search, $page } = useView(
+  todoView, () => props, emit
+)
+
+// Solid
+const { $search, $page } = useView(
+  todoView, () => props
+)
+
+// Iterate model instances
+<Each model={userModel} source={userModel.$ids}>
+  {(user) => <Card />}
+</Each>
+```
+::::
+  </div>
 </div>
 
 <div class="landing-section">

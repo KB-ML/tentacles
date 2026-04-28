@@ -35,9 +35,11 @@
     "lint-staged": "16.2.7",
     "tsup": "^8.5.1",
     "typescript": "^5.9.3",
+    "vite": "5.4.21",
     "vitepress": "^1.6.4",
-    "vitepress-plugin-llmstxt": "^0.5.1",
+    "vitepress-plugin-llms": "^1.12.1",
     "vitepress-plugin-tabs": "^0.8.0",
+    "vitepress-sidebar": "^1.33.1",
     "vitest": "^3.1.1"
   },
   "lint-staged": {
